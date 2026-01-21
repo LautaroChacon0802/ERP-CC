@@ -1,22 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { viteSingleFile } from "vite-plugin-singlefile";
 
+// Configuración optimizada para Vercel
 export default defineConfig({
-  plugins: [react(), viteSingleFile()],
-  base: './', 
+  plugins: [react()],
   build: {
-    outDir: "dist",
+    outDir: 'dist', // Carpeta de salida estándar
     emptyOutDir: true,
-    assetsInlineLimit: 100000000, // Fuerza a que todo se inlinee
-    chunkSizeWarningLimit: 100000000,
-    cssCodeSplit: false, // No separar el CSS
-    rollupOptions: {
-      output: {
-        // CORRECCIÓN: Esta propiedad va DENTRO de output
-        inlineDynamicImports: true,
-        manualChunks: undefined,
-      },
-    },
   },
 });

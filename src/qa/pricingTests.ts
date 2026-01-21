@@ -1,5 +1,5 @@
 import { calculateScenarioPrices, roundUp, roundDown } from '../utils';
-import { CoefficientRow, ScenarioParams } from '../types';
+import { CoefficientRow, ScenarioParams } from '../src/types';
 
 /**
  * QA TEST SUITE

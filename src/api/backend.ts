@@ -1,86 +1,55 @@
-import { HistoryLogEntry, Scenario } from '../types';
+import { supabase } from '../lib/supabase';
+import { HistoryLogEntry, Scenario, CoefficientRow } from '../types';
 
-// Type definitions for Google Apps Script internals
-declare global {
-  interface Window {
-    google: {
-      script: {
-        run: {
-          withSuccessHandler: (callback: (response: any) => void) => {
-            withFailureHandler: (callback: (error: Error) => void) => any;
-          };
-          [key: string]: any;
-        };
-      };
-    };
-  }
-}
+export const BackendService = {
+  // Obtener coeficientes desde Supabase
+  getDefaultCoefficients: async (): Promise<CoefficientRow[]> => {
+    const { data, error } = await supabase
+      .from('config_coefficients')
+      .select('day, value')
+      .order('day', { ascending: true });
 
-// Helper to detect environment
-const isGAS = () => typeof window !== 'undefined' && window.google && window.google.script;
-
-// --- PROMISE WRAPPER FOR GAS ---
-const runGoogleScript = <T>(functionName: string, ...args: any[]): Promise<T> => {
-  return new Promise((resolve, reject) => {
-    if (!isGAS()) {
-      reject(new Error('Google Script environment not found'));
-      return;
-    }
-    
-    window.google.script.run
-      .withSuccessHandler((response: T) => resolve(response))
-      .withFailureHandler((error: Error) => reject(error))
-      [functionName](...args);
-  });
-};
-
-// --- MOCK SERVICE (FOR LOCALHOST) ---
-const mockService = {
-  getHistory: async (): Promise<HistoryLogEntry[]> => {
-    console.log('[MOCK] Getting history from localStorage...');
-    await new Promise(r => setTimeout(r, 800)); // Simulate network delay
-    const stored = localStorage.getItem('mock_history');
-    return stored ? JSON.parse(stored) : [];
+    if (error) throw error;
+    return data as CoefficientRow[];
   },
 
-  saveScenario: async (scenario: Scenario): Promise<boolean> => {
-    console.log('[MOCK] Saving scenario...', scenario.name);
-    await new Promise(r => setTimeout(r, 1200)); // Simulate network delay
-    
-    // Create history entry
-    const entry: HistoryLogEntry = {
-      scenarioId: scenario.id,
-      name: scenario.name,
-      season: scenario.season,
-      scenarioType: scenario.type,
-      status: scenario.status,
-      closedAt: scenario.closedAt || new Date().toISOString(),
-      data: scenario.calculatedData,
-      params: scenario.params
-    };
-
-    // Save to local storage mock
-    const currentHistory = await mockService.getHistory();
-    const newHistory = [entry, ...currentHistory];
-    localStorage.setItem('mock_history', JSON.stringify(newHistory));
-    
-    return true;
-  }
-};
-
-// --- REAL SERVICE (GAS) ---
-const gasService = {
+  // Obtener historial de escenarios cerrados
   getHistory: async (): Promise<HistoryLogEntry[]> => {
-    const rawData = await runGoogleScript<string>('apiGetHistory');
-    return JSON.parse(rawData);
+    const { data, error } = await supabase
+      .from('pricing_scenarios')
+      .select('*')
+      .eq('status', 'CERRADO')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data.map(row => ({
+      scenarioId: row.id,
+      name: row.name,
+      season: row.season,
+      scenarioType: row.type,
+      status: row.status,
+      closedAt: row.closed_at,
+      data: row.calculated_data,
+      params: row.params
+    }));
   },
 
+  // Guardar un escenario (Upsert permite crear o actualizar)
   saveScenario: async (scenario: Scenario): Promise<boolean> => {
-    // Serialize complex object before sending to GAS
-    const jsonString = JSON.stringify(scenario);
-    return await runGoogleScript<boolean>('apiSaveScenario', jsonString);
+    const { error } = await supabase
+      .from('pricing_scenarios')
+      .upsert({
+        // Si el ID empieza con 'sc-', es temporal de la app; dejamos que Supabase genere el UUID real
+        id: scenario.id.startsWith('sc-') ? undefined : scenario.id,
+        name: scenario.name,
+        season: scenario.season,
+        type: scenario.type,
+        status: scenario.status,
+        params: scenario.params,
+        calculated_data: scenario.calculatedData,
+        closed_at: scenario.status === 'CERRADO' ? new Date().toISOString() : null
+      });
+
+    return !error;
   }
 };
-
-// --- EXPORTED API ---
-export const BackendService = isGAS() ? gasService : mockService;
