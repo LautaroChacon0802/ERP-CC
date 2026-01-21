@@ -64,6 +64,7 @@ export const useScenarioManager = () => {
         setDefaultCoefficients(configCoefs);
 
         if (migratedHistory.length === 0) {
+            // CASO A: No hay historial, crear semilla inicial
             const seedType = ScenarioType.FINAL;
             const seedScenario: Scenario = {
               id: 'seed-2025',
@@ -84,6 +85,29 @@ export const useScenarioManager = () => {
             setActiveScenarioId(seedScenario.id);
             notify("Sistema inicializado con configuración base", "info");
         } else {
+            // CASO B: SI hay historial (SOLUCIÓN DEL ERROR DE PANTALLA BLANCA)
+            // Transformamos el historial en escenarios activos para que la UI tenga qué mostrar
+            const loadedScenarios: Scenario[] = migratedHistory.map(h => ({
+                id: h.scenarioId,
+                name: h.name || 'Escenario Recuperado', // Fallback por si el nombre viene vacío del CSV
+                season: h.season,
+                type: h.scenarioType as ScenarioType,
+                baseScenarioId: null,
+                status: h.status,
+                createdAt: h.closedAt || new Date().toISOString(),
+                closedAt: h.closedAt,
+                params: h.params,
+                coefficients: configCoefs, // Usamos los coeficientes actuales como referencia
+                calculatedData: h.data
+            }));
+
+            setScenarios(loadedScenarios);
+            
+            // Seleccionamos automáticamente el primero (el más reciente)
+            if (loadedScenarios.length > 0) {
+                setActiveScenarioId(loadedScenarios[0].id);
+            }
+
             notify("Histórico cargado correctamente", "success");
         }
 
