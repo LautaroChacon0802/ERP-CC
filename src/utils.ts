@@ -1,4 +1,4 @@
-import { CoefficientRow, PricingRow, ScenarioParams, DateRange } from "./src/types";
+import { CoefficientRow, PricingRow, ScenarioParams, DateRange } from "./types";
 
 // Helper for dynamic rounding
 export const roundUp = (num: number, multiple: number): number => {

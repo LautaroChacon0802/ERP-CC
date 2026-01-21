@@ -1,7 +1,6 @@
-
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { User, AuthState } from '../types';
-import { BackendService } from '../api/backend';
+import { supabase } from '../lib/supabase'; // Importamos el cliente de Supabase
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
@@ -9,7 +8,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Persistence check (Simple local storage for now, mostly relevant for dev)
+  // Verificar si hay sesión guardada al iniciar
   useEffect(() => {
     const stored = localStorage.getItem('castor_user');
     if (stored) {
@@ -24,15 +23,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (email: string, pass: string) => {
     setLoading(true);
     try {
-        const userData = await BackendService.login(email, pass);
+        // 1. Autenticación oficial de Supabase
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email,
+            password: pass,
+        });
+
+        if (authError) throw new Error(authError.message);
+
+        // 2. Buscar los permisos en la tabla 'profiles'
+        const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single();
+
+        if (profileError) throw new Error('No se pudo cargar el perfil del usuario.');
+
+        // 3. Adaptar los datos al formato de nuestra App
+        const userData: User = {
+            email: profileData.email,
+            name: profileData.full_name, // Mapeamos full_name de la DB a name de la App
+            permissions: profileData.permissions
+        };
+
         setUser(userData);
         localStorage.setItem('castor_user', JSON.stringify(userData));
+        
+    } catch (err: any) {
+        throw new Error(err.message || 'Error al iniciar sesión');
     } finally {
         setLoading(false);
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut(); // Cerrar sesión en Supabase también
     setUser(null);
     localStorage.removeItem('castor_user');
   };

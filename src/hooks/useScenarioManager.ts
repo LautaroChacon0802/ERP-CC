@@ -9,8 +9,8 @@ import {
 import { 
   INITIAL_PARAMS, 
   SCENARIO_TYPES 
-} from '../../constants';
-import { calculateScenarioPrices, migrateParams } from '../../utils';
+} from '../constants';
+import { calculateScenarioPrices, migrateParams } from '../utils';
 import { BackendService } from '../api/backend';
 import { Toast, ToastType } from '../components/ToastSystem';
 import { TabInfo } from '../components/SheetTabs';

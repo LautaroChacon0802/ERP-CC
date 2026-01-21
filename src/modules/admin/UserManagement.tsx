@@ -43,7 +43,9 @@ const UserManagement: React.FC<Props> = ({ onBack }) => {
         if (!editingUser) return;
         setIsSaving(true);
         try {
-            await BackendService.saveUser(editingUser, newPass || undefined);
+            // CORRECCIÓN: Solo pasamos el usuario, borramos el segundo argumento
+            await BackendService.saveUser(editingUser); 
+            
             await loadUsers();
             setEditingUser(null);
             setNewPass('');
