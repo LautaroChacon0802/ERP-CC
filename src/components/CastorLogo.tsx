@@ -1,6 +1,6 @@
 import React from 'react';
 // Importamos el archivo directamente para que Vite lo procese
-import logoImg from '../assets/logo-castor.png'; 
+import logoImg from '../assets/logo.png'; 
 
 interface Props {
   className?: string;
