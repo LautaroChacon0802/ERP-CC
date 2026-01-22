@@ -36,8 +36,8 @@ const LoginScreen: React.FC = () => {
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden z-10 relative">
         <div className="p-8 pb-6 text-center border-b border-gray-100">
           <div className="flex justify-center mb-4">
-             <div className="bg-castor-red p-3 rounded-xl shadow-lg">
-                <CastorLogo className="h-12 w-auto filter brightness-0 invert" />
+             <div className="bg-white p-2 rounded-xl shadow-md flex items-center justify-center">
+                <CastorLogo className="h-14 w-auto" />
              </div>
           </div>
           <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Bienvenido</h2>
