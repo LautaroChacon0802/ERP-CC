@@ -162,6 +162,7 @@ export const calculateScenarioPrices = (
     if (minorPromoVisual > maxMinorPromo) minorPromoVisual = roundDown(maxMinorPromo, safeRounding);
 
     // --- SYSTEM / DOBLEMENTE (Technical) ---
+    // Here we strictly TRUNCATE to 4 decimals the DAILY value
     const adultRegularDailySystem = truncate4(adultRegularVisual / row.day);
     const adultPromoDailySystem = truncate4(adultPromoVisual / row.day);
     const minorRegularDailySystem = truncate4(minorRegularVisual / row.day);
@@ -192,4 +193,9 @@ export const formatCurrency = (val: number) => {
 
 export const formatDecimal = (val: number) => {
   return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(val);
+};
+
+// --- NEW FUNCTION: STRICT 4 DECIMALS ---
+export const format4Decimals = (val: number) => {
+  return new Intl.NumberFormat('es-AR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(val);
 };

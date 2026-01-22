@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { PricingRow, Scenario } from '../types';
-import { formatCurrency, formatDecimal } from '../utils';
+import { formatCurrency, formatDecimal, format4Decimals } from '../utils'; // Import updated
 import { Download, FileSpreadsheet, FileText, Image as ImageIcon, File, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -63,7 +63,7 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
   const getDescription = () => {
     if (isMatrix) return 'Cálculo técnico: (Base x Días) x (1 - %Dto).';
     if (isVisual) return 'Aplicando reglas de redondeo: Adulto (Cielo), Menor (Piso).';
-    if (isSystem) return 'Valores totales proyectados (Base diaria truncada x Días).';
+    if (isSystem) return 'Valores DIARIOS truncados a 4 decimales.';
     return '';
   };
 
@@ -81,12 +81,13 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
           'Menor Promo': row.minorPromoVisual
         };
       } else if (isSystem) {
+        // EXPORT: SYSTEM VALUES (DAILY, 4 DECIMALS)
         return {
           ...baseObj,
-          'Adulto Regular (Total Sist)': row.adultRegularDailySystem * row.days,
-          'Menor Regular (Total Sist)': row.minorRegularDailySystem * row.days,
-          'Adulto Promo (Total Sist)': row.adultPromoDailySystem * row.days,
-          'Menor Promo (Total Sist)': row.minorPromoDailySystem * row.days
+          'Adulto Regular (Diario)': row.adultRegularDailySystem,
+          'Menor Regular (Diario)': row.minorRegularDailySystem,
+          'Adulto Promo (Diario)': row.adultPromoDailySystem,
+          'Menor Promo (Diario)': row.minorPromoDailySystem
         };
       } else {
         return {
@@ -123,7 +124,7 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
     const headers = isVisual 
         ? [['Días', 'Adulto Regular', 'Menor Regular', 'Adulto Promo', 'Menor Promo']]
         : isSystem 
-            ? [['Días', 'Ad. Reg (Total)', 'Men. Reg (Total)', 'Ad. Promo (Total)', 'Men. Promo (Total)']]
+            ? [['Días', 'Ad. Reg (Diario)', 'Men. Reg (Diario)', 'Ad. Promo (Diario)', 'Men. Promo (Diario)']]
             : [['Días', '% Dto', 'Adulto Raw', 'Menor Raw', 'Ad. Promo Raw', 'Men. Promo Raw']];
 
     const body = scenario.calculatedData.map(row => {
@@ -136,12 +137,13 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
                 formatCurrency(row.minorPromoVisual)
             ];
         } else if (isSystem) {
+            // PDF EXPORT: SYSTEM VALUES (DAILY, 4 DECIMALS)
             return [
                 row.days,
-                formatDecimal(row.adultRegularDailySystem * row.days),
-                formatDecimal(row.minorRegularDailySystem * row.days),
-                formatDecimal(row.adultPromoDailySystem * row.days),
-                formatDecimal(row.minorPromoDailySystem * row.days)
+                format4Decimals(row.adultRegularDailySystem),
+                format4Decimals(row.minorRegularDailySystem),
+                format4Decimals(row.adultPromoDailySystem),
+                format4Decimals(row.minorPromoDailySystem)
             ];
         } else {
             return [
@@ -302,16 +304,16 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
               { !isSystem && <th scope="col" className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">% Dto</th> }
               
               <th scope="col" className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider border-l border-gray-200">
-                Adulto Regular {isSystem && '(Total)'}
+                Adulto Regular {isSystem && '(Diario)'}
               </th>
               <th scope="col" className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider">
-                Menor Regular {isSystem && '(Total)'}
+                Menor Regular {isSystem && '(Diario)'}
               </th>
               <th scope="col" className="px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider border-l border-gray-200">
-                Adulto Promo {isSystem && '(Total)'}
+                Adulto Promo {isSystem && '(Diario)'}
               </th>
               <th scope="col" className="px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Menor Promo {isSystem && '(Total)'}
+                Menor Promo {isSystem && '(Diario)'}
               </th>
             </tr>
           </thead>
@@ -325,25 +327,25 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
                 
                 {/* Adult Regular */}
                 <td className="px-4 py-3 font-bold text-gray-900 border-l bg-gray-50/50">
-                   {isSystem ? formatDecimal(row.adultRegularDailySystem * row.days) : 
+                   {isSystem ? format4Decimals(row.adultRegularDailySystem) : 
                     isVisual ? formatCurrency(row.adultRegularVisual) : 
                     formatDecimal(row.adultRegularRaw)}
                 </td>
                 {/* Minor Regular */}
                 <td className="px-4 py-3 text-gray-800">
-                   {isSystem ? formatDecimal(row.minorRegularDailySystem * row.days) : 
+                   {isSystem ? format4Decimals(row.minorRegularDailySystem) : 
                     isVisual ? formatCurrency(row.minorRegularVisual) : 
                     formatDecimal(row.minorRegularRaw)}
                 </td>
                  {/* Adult Promo */}
                 <td className="px-4 py-3 text-gray-600 border-l bg-gray-50/50">
-                   {isSystem ? formatDecimal(row.adultPromoDailySystem * row.days) : 
+                   {isSystem ? format4Decimals(row.adultPromoDailySystem) : 
                     isVisual ? formatCurrency(row.adultPromoVisual) : 
                     formatDecimal(row.adultPromoRaw)}
                 </td>
                 {/* Minor Promo */}
                 <td className="px-4 py-3 text-gray-600">
-                   {isSystem ? formatDecimal(row.minorPromoDailySystem * row.days) : 
+                   {isSystem ? format4Decimals(row.minorPromoDailySystem) : 
                     isVisual ? formatCurrency(row.minorPromoVisual) : 
                     formatDecimal(row.minorPromoRaw)}
                 </td>
