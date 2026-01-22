@@ -1,73 +1,158 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HistoryLogEntry } from '../types';
-import { formatCurrency } from '../utils';
+import DataSheet from './DataSheet';
+import { Clock, Calendar, LayoutGrid, Eye, Database, ChevronDown } from 'lucide-react';
 
 interface Props {
   history: HistoryLogEntry[];
 }
 
 const HistorySheet: React.FC<Props> = ({ history }) => {
+  // Estado para el ID seleccionado y el modo de vista (Matriz, Visual, Dispongo)
+  const [selectedId, setSelectedId] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'matrix' | 'visual' | 'system'>('visual');
+
+  // EFECTO: Seleccionar automáticamente el tarifario más reciente al cargar
+  useEffect(() => {
+    if (history && history.length > 0 && !selectedId) {
+      // Asumimos que el historial viene ordenado por fecha (el backend suele mandarlo así),
+      // seleccionamos el primero (índice 0).
+      setSelectedId(history[0].scenarioId);
+    }
+  }, [history]);
+
+  // Si no hay historial, mostramos pantalla vacía
+  if (!history || history.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-gray-400 bg-white rounded-lg border border-gray-200 mt-4">
+        <Clock className="h-12 w-12 mb-4 opacity-50" />
+        <p className="text-lg font-medium">No hay historial de tarifarios cerrados.</p>
+      </div>
+    );
+  }
+
+  // Encontrar el objeto completo del tarifario seleccionado
+  const selectedEntry = history.find(h => h.scenarioId === selectedId) || history[0];
+
+  // Construimos un objeto "Scenario" temporal para que el componente DataSheet lo pueda leer.
+  // Usamos los datos guardados en el historial (params y data calculada).
+  const tempScenario = {
+    id: selectedEntry.scenarioId,
+    name: selectedEntry.name,
+    season: selectedEntry.season,
+    type: selectedEntry.scenarioType as any,
+    status: selectedEntry.status,
+    createdAt: '', // No relevante para visualización
+    closedAt: selectedEntry.closedAt,
+    params: selectedEntry.params,
+    coefficients: [], // No necesitamos coeficientes porque usamos la 'data' ya calculada
+    calculatedData: selectedEntry.data
+  };
+
   return (
-    <div className="p-6 bg-white min-h-[500px]">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-800">Log Histórico (Inmutable)</h2>
-        <p className="text-sm text-gray-500">Registro de todos los escenarios cerrados y aprobados.</p>
+    <div className="space-y-6 mt-4 animate-fadeIn">
+      
+      {/* --- PANEL DE CONTROL (HEADER) --- */}
+      <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-end md:items-center">
+        
+        {/* SECCIÓN 1: SELECTOR DE TARIFARIO */}
+        <div className="w-full md:w-1/2">
+            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                <Clock size={14} /> Seleccionar Versión Histórica
+            </label>
+            <div className="relative group">
+                <select
+                    value={selectedId}
+                    onChange={(e) => setSelectedId(e.target.value)}
+                    className="appearance-none block w-full pl-4 pr-10 py-3 text-base border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-castor-red focus:border-castor-red bg-white text-gray-800 font-medium cursor-pointer hover:border-gray-400 transition-colors"
+                >
+                    {history.map((entry) => (
+                        <option key={entry.scenarioId} value={entry.scenarioId}>
+                            {/* Formato: AÑO | NOMBRE | FECHA DE CIERRE */}
+                            {entry.season || '----'} | {entry.name} — {new Date(entry.closedAt).toLocaleDateString()}
+                        </option>
+                    ))}
+                </select>
+                {/* Icono de flecha personalizado */}
+                <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-gray-500 group-hover:text-castor-red transition-colors">
+                    <ChevronDown size={20} />
+                </div>
+            </div>
+        </div>
+
+        {/* SECCIÓN 2: SELECTOR DE VISTA (TABS) */}
+        <div className="w-full md:w-auto">
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 md:text-right">
+                Modo de Visualización
+            </label>
+            <div className="flex bg-gray-100 p-1.5 rounded-lg border border-gray-200">
+                <button
+                    onClick={() => setViewMode('matrix')}
+                    className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all ${
+                        viewMode === 'matrix' 
+                        ? 'bg-white text-blue-700 shadow-sm ring-1 ring-black/5' 
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                    <LayoutGrid size={16} /> Matriz
+                </button>
+                <button
+                    onClick={() => setViewMode('visual')}
+                    className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all ${
+                        viewMode === 'visual' 
+                        ? 'bg-white text-green-700 shadow-sm ring-1 ring-black/5' 
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                    <Eye size={16} /> Tarifario
+                </button>
+                <button
+                    onClick={() => setViewMode('system')}
+                    className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-md flex items-center justify-center gap-2 transition-all ${
+                        viewMode === 'system' 
+                        ? 'bg-white text-purple-700 shadow-sm ring-1 ring-black/5' 
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                    <Database size={16} /> Dispongo
+                </button>
+            </div>
+        </div>
       </div>
 
-      {history.length === 0 ? (
-        <div className="text-center py-10 bg-gray-50 rounded border border-dashed border-gray-300">
-          <p className="text-gray-500">No hay escenarios cerrados aún.</p>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {history.map((entry) => (
-            <div key={entry.scenarioId} className="border rounded-lg overflow-hidden shadow-sm">
-              <div className="bg-gray-100 px-4 py-3 border-b flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">
-                    {entry.name}
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    {entry.season} | {entry.scenarioType} | Cerrado el: {new Date(entry.closedAt).toLocaleString()}
-                  </p>
+      {/* --- ÁREA DE CONTENIDO --- */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden min-h-[600px] flex flex-col">
+        {/* Cabecera del Reporte */}
+        <div className="px-6 py-4 border-b border-gray-100 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+             <div>
+                <h3 className="text-xl font-black text-gray-800 tracking-tight">{selectedEntry.name}</h3>
+                <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                    <span className="flex items-center gap-1"><Calendar size={14} /> Temporada {selectedEntry.season}</span>
+                    <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                    <span className="flex items-center gap-1"><Clock size={14} /> Cerrado el {new Date(selectedEntry.closedAt).toLocaleString()}</span>
                 </div>
-                <div className="text-sm text-right flex flex-col items-end">
-                  <div className="text-gray-700 font-medium">Aumento: {entry.params.increasePercentage}%</div>
-                  <div className="text-gray-600 text-xs">Base: {formatCurrency(entry.params.baseRateAdult1Day)}</div>
-                  <div className="text-gray-500 text-[10px] mt-1 bg-gray-200 px-1 rounded">
-                    Redondeo: ${entry.params.roundingValue || 100}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-right text-xs">
-                   <thead className="bg-gray-50">
-                     <tr>
-                        <th className="px-2 py-1 text-left">Días</th>
-                        <th className="px-2 py-1 text-gray-500">% Dto</th>
-                        <th className="px-2 py-1 font-bold">Adulto Final</th>
-                        <th className="px-2 py-1">Menor Final</th>
-                        <th className="px-2 py-1 text-gray-500">Total Sist Ad</th>
-                     </tr>
-                   </thead>
-                   <tbody className="bg-white divide-y divide-gray-200">
-                      {entry.data.map(row => (
-                        <tr key={row.days}>
-                           <td className="px-2 py-1 text-left font-medium">{row.days}</td>
-                           <td className="px-2 py-1 text-gray-400">{row.coefficient.toFixed(2)}%</td>
-                           <td className="px-2 py-1 font-semibold">{formatCurrency(row.adultRegularVisual)}</td>
-                           <td className="px-2 py-1">{formatCurrency(row.minorRegularVisual)}</td>
-                           <td className="px-2 py-1 text-gray-500">{(row.adultRegularDailySystem * row.days).toFixed(4)}</td>
-                        </tr>
-                      ))}
-                   </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
+             </div>
+             
+             <div className="flex gap-2">
+                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${
+                    selectedEntry.scenarioType === 'Final' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-orange-50 text-orange-700 border-orange-200'
+                 }`}>
+                    {selectedEntry.scenarioType}
+                 </span>
+                 <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-gray-100 text-gray-600 border border-gray-200">
+                    CERRADO
+                 </span>
+             </div>
         </div>
-      )}
+        
+        {/* Tabla de Datos (Reutilizamos DataSheet) */}
+        <div className="flex-1 p-0">
+            <DataSheet 
+                scenario={tempScenario as any} 
+                viewMode={viewMode} 
+            />
+        </div>
+      </div>
     </div>
   );
 };
