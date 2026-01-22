@@ -4,11 +4,13 @@ import {
   ScenarioStatus, 
   ScenarioType, 
   HistoryLogEntry, 
-  CoefficientRow 
+  CoefficientRow,
+  ScenarioCategory // Importamos el tipo
 } from '../types';
 import { 
   INITIAL_PARAMS, 
-  SCENARIO_TYPES 
+  SCENARIO_TYPES,
+  getItemsByCategory // Importamos helper de items
 } from '../constants';
 import { calculateScenarioPrices, migrateParams } from '../utils';
 import { BackendService } from '../api/backend';
@@ -18,6 +20,9 @@ import { TabInfo } from '../components/SheetTabs';
 export const useScenarioManager = () => {
   // --- STATE ---
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  // NUEVO: Estado para la categoría seleccionada (Por defecto LIFT)
+  const [selectedCategory, setSelectedCategory] = useState<ScenarioCategory>('LIFT');
+  
   const [activeScenarioId, setActiveScenarioId] = useState<string>('');
   const [history, setHistory] = useState<HistoryLogEntry[]>([]);
   const [defaultCoefficients, setDefaultCoefficients] = useState<CoefficientRow[]>([]);
@@ -37,19 +42,43 @@ export const useScenarioManager = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
+  // --- COMPUTED: Filter Scenarios by Category ---
+  const filteredScenarios = useMemo(() => {
+    return scenarios.filter(s => (s.category || 'LIFT') === selectedCategory);
+  }, [scenarios, selectedCategory]);
+
+  const activeScenario = useMemo(() => 
+    scenarios.find(s => s.id === activeScenarioId), 
+    [scenarios, activeScenarioId]
+  );
+
+  // --- EFFECT: Auto-switch active scenario when category changes ---
+  useEffect(() => {
+    // Si el escenario activo NO pertenece a la categoría actual, buscamos uno que sí.
+    const belongs = activeScenario && (activeScenario.category || 'LIFT') === selectedCategory;
+    
+    if (!belongs) {
+        // Seleccionar el primero de la lista filtrada (usualmente el más reciente si está ordenado)
+        const firstInCat = scenarios.find(s => (s.category || 'LIFT') === selectedCategory);
+        if (firstInCat) {
+            setActiveScenarioId(firstInCat.id);
+        } else {
+            setActiveScenarioId('');
+        }
+    }
+  }, [selectedCategory, scenarios, activeScenario]);
+
+
   // --- INITIALIZATION ---
   useEffect(() => {
     const initApp = async () => {
       try {
         setLoadingMessage('Sincronizando configuración y datos...');
-        
-        // Carga paralela de historial y coeficientes
         const [remoteHistory, configCoefs] = await Promise.all([
             BackendService.getHistory(),
             BackendService.getDefaultCoefficients()
         ]);
 
-        // Migración de parámetros antiguos a la nueva estructura (si aplica)
         const migratedHistory = remoteHistory.map(entry => ({
             ...entry,
             params: migrateParams(entry.params)
@@ -59,12 +88,13 @@ export const useScenarioManager = () => {
         setDefaultCoefficients(configCoefs);
 
         if (migratedHistory.length === 0) {
-            // CASO A: No hay historial, crear semilla inicial
+            // Seed inicial (Solo LIFT)
             const seedScenario: Scenario = {
               id: 'seed-2025',
               name: `Tarifario Base`,
               season: 2025,
               type: ScenarioType.FINAL,
+              category: 'LIFT', // Default
               baseScenarioId: null,
               status: ScenarioStatus.CLOSED,
               createdAt: new Date().toISOString(),
@@ -73,17 +103,17 @@ export const useScenarioManager = () => {
               coefficients: configCoefs,
               calculatedData: []
             };
-            seedScenario.calculatedData = calculateScenarioPrices(seedScenario.params, seedScenario.coefficients);
+            seedScenario.calculatedData = calculateScenarioPrices(seedScenario.params, seedScenario.coefficients, 'LIFT');
             setScenarios([seedScenario]);
             setActiveScenarioId(seedScenario.id);
-            notify("Sistema inicializado con configuración base", "info");
         } else {
-            // CASO B: Cargar historial existente
             const loadedScenarios: Scenario[] = migratedHistory.map(h => ({
                 id: h.scenarioId,
                 name: h.name || 'Escenario Recuperado',
                 season: h.season,
                 type: h.scenarioType as ScenarioType,
+                // Si viene del histórico viejo sin categoría, asumimos LIFT
+                category: (h as any).category || 'LIFT', 
                 baseScenarioId: null,
                 status: h.status,
                 createdAt: h.closedAt || new Date().toISOString(),
@@ -94,10 +124,12 @@ export const useScenarioManager = () => {
             }));
             setScenarios(loadedScenarios);
             
-            // Seleccionar el más reciente
-            if (loadedScenarios.length > 0) {
-                setActiveScenarioId(loadedScenarios[0].id);
-            }
+            // Lógica de selección inicial inteligente
+            // Buscamos si hay alguno de la categoría seleccionada por defecto
+            const initialSelection = loadedScenarios.find(s => (s.category || 'LIFT') === selectedCategory);
+            if (initialSelection) setActiveScenarioId(initialSelection.id);
+            else if (loadedScenarios.length > 0) setActiveScenarioId(loadedScenarios[0].id);
+
             notify("Histórico cargado correctamente", "success");
         }
 
@@ -109,64 +141,79 @@ export const useScenarioManager = () => {
       }
     };
     initApp();
-  }, []);
-
-  // --- COMPUTED ---
-  const activeScenario = useMemo(() => 
-    scenarios.find(s => s.id === activeScenarioId), 
-    [scenarios, activeScenarioId]
-  );
+  }, []); // Run once
 
   // --- ACTIONS ---
 
   const createScenario = () => {
-    if (!activeScenario) {
-        notify("No hay un escenario base seleccionado", "error");
-        return; 
-    }
-
-    const existingDraft = scenarios.find(s => s.status === ScenarioStatus.DRAFT);
+    // Validar si ya hay un borrador en ESTA categoría
+    const existingDraft = filteredScenarios.find(s => s.status === ScenarioStatus.DRAFT);
     if (existingDraft) {
-      notify("Ya existe un borrador activo.", "warning");
+      notify(`Ya existe un borrador activo en ${selectedCategory}.`, "warning");
       setActiveScenarioId(existingDraft.id);
       return;
     }
 
-    // Tomar precio base del escenario actual
-    const baseRow = activeScenario.calculatedData.find(r => r.days === 1);
-    const newBaseRate = baseRow ? baseRow.adultRegularVisual : activeScenario.params.baseRateAdult1Day;
+    // Datos base para clonar o inicializar
+    // Si hay un escenario activo en esta categoría, lo usamos de base.
+    // Si no, usamos valores por defecto.
+    const baseScenario = activeScenario && (activeScenario.category || 'LIFT') === selectedCategory 
+        ? activeScenario 
+        : null;
+
+    // Determinar precio base inicial (Solo para LIFT)
+    let newBaseRate = 45000;
+    if (baseScenario) {
+        const baseRow = baseScenario.calculatedData.find(r => r.days === 1);
+        newBaseRate = baseRow ? baseRow.adultRegularVisual : baseScenario.params.baseRateAdult1Day;
+    }
+
     const newId = `sc-${Date.now()}`;
     
-    // CREACIÓN LIMPIA: Año 0 y Nombre vacío para forzar edición manual
+    // Inicializar precios de artículos de Rental si corresponde
+    const initialRentalPrices: Record<string, number> = {};
+    if (selectedCategory !== 'LIFT') {
+        const items = getItemsByCategory(selectedCategory);
+        items.forEach(item => {
+            // Si venimos de un baseScenario, intentamos copiar sus precios, si no, 0
+            initialRentalPrices[item.id] = baseScenario?.params.rentalBasePrices?.[item.id] || 0;
+        });
+    }
+
+    // Parametros Iniciales
+    const newParams = {
+        ...INITIAL_PARAMS,
+        baseRateAdult1Day: selectedCategory === 'LIFT' ? newBaseRate : 0, // En rental el baseRate global no se usa
+        rentalBasePrices: initialRentalPrices, // Precios multiproducto
+        // Copiar fechas si existen
+        validFrom: baseScenario?.params.validFrom || INITIAL_PARAMS.validFrom,
+        validTo: baseScenario?.params.validTo || INITIAL_PARAMS.validTo,
+        // Generar nuevos IDs para temporadas
+        promoSeasons: (baseScenario?.params.promoSeasons || []).map(s => ({...s, id: `promo-${Date.now()}-${Math.random().toString(36).substr(2,5)}`})),
+        regularSeasons: (baseScenario?.params.regularSeasons || []).map(s => ({...s, id: `reg-${Date.now()}-${Math.random().toString(36).substr(2,5)}`}))
+    };
+
     const newScenario: Scenario = {
       id: newId,
-      name: "", // Nombre vacío
-      season: 0, // Año 0 (se mostrará vacío en el input)
+      name: "",
+      season: 0,
       type: ScenarioType.FINAL,
-      baseScenarioId: activeScenario.id,
+      category: selectedCategory, // ¡Importante! Asignar la categoría actual
+      baseScenarioId: baseScenario?.id || null,
       status: ScenarioStatus.DRAFT,
       createdAt: new Date().toISOString(),
-      params: {
-        ...INITIAL_PARAMS,
-        baseRateAdult1Day: newBaseRate,
-        validFrom: activeScenario.params.validFrom,
-        validTo: activeScenario.params.validTo,
-        // Generar nuevos IDs únicos para las temporadas
-        promoSeasons: activeScenario.params.promoSeasons.map(s => ({...s, id: `promo-${Date.now()}-${Math.random().toString(36).substr(2,5)}`})),
-        regularSeasons: activeScenario.params.regularSeasons.map(s => ({...s, id: `reg-${Date.now()}-${Math.random().toString(36).substr(2,5)}`}))
-      },
-      coefficients: [...activeScenario.coefficients.map(c => ({...c}))],
+      params: newParams,
+      coefficients: baseScenario ? [...baseScenario.coefficients.map(c => ({...c}))] : [...defaultCoefficients],
       calculatedData: []
     };
     
-    // Calcular datos iniciales
-    newScenario.calculatedData = calculateScenarioPrices(newScenario.params, newScenario.coefficients);
+    // Calcular
+    newScenario.calculatedData = calculateScenarioPrices(newScenario.params, newScenario.coefficients, selectedCategory);
 
-    // Actualizar estado local (SIN GUARDAR EN DB)
-    setScenarios([...scenarios, newScenario]);
+    setScenarios(prev => [newScenario, ...prev]); // Agregar al principio
     setActiveScenarioId(newId);
     setActiveTab('params');
-    notify("Nuevo borrador creado. Define el Año y Nombre.", "info");
+    notify(`Nuevo borrador de ${selectedCategory} creado.`, "info");
   };
 
   const duplicateScenario = () => {
@@ -180,9 +227,12 @@ export const useScenarioManager = () => {
       createdAt: new Date().toISOString(),
       closedAt: undefined,
     };
-    setScenarios([...scenarios, copy]);
+    // Recalcular por seguridad
+    copy.calculatedData = calculateScenarioPrices(copy.params, copy.coefficients, copy.category || 'LIFT');
+
+    setScenarios(prev => [copy, ...prev]);
     setActiveScenarioId(newId);
-    notify("Escenario duplicado (Solo local).", "success");
+    notify("Escenario duplicado (Local).", "success");
   };
 
   const renameScenario = (name: string) => {
@@ -190,13 +240,11 @@ export const useScenarioManager = () => {
     setScenarios(scenarios.map(s => s.id === activeScenarioId ? { ...s, name } : s));
   };
 
-  // NUEVA FUNCIÓN: Actualizar el Año (Temporada)
   const updateSeason = (season: number) => {
     if (!activeScenario || activeScenario.status === ScenarioStatus.CLOSED) return;
     setScenarios(scenarios.map(s => s.id === activeScenarioId ? { ...s, season } : s));
   };
 
-  // NUEVA FUNCIÓN: Cancelar/Descartar Borrador
   const discardDraft = () => {
     if (!activeScenario || activeScenario.status !== ScenarioStatus.DRAFT) return;
 
@@ -204,12 +252,10 @@ export const useScenarioManager = () => {
         const nextScenarios = scenarios.filter(s => s.id !== activeScenarioId);
         setScenarios(nextScenarios);
         
-        // Volver al último escenario disponible
-        if (nextScenarios.length > 0) {
-            setActiveScenarioId(nextScenarios[0].id);
-        } else {
-            setActiveScenarioId('');
-        }
+        // Volver al último de esta categoría
+        const fallback = nextScenarios.find(s => (s.category || 'LIFT') === selectedCategory);
+        setActiveScenarioId(fallback ? fallback.id : '');
+        
         notify("Borrador cancelado.", "info");
     }
   };
@@ -217,7 +263,6 @@ export const useScenarioManager = () => {
   const closeScenario = async () => {
     if (!activeScenario || activeScenario.status !== ScenarioStatus.DRAFT) return;
     
-    // Validaciones estrictas antes de guardar
     if (!activeScenario.name || activeScenario.name.trim() === "") {
         notify("Error: El tarifario debe tener un NOMBRE.", "warning");
         return;
@@ -239,7 +284,7 @@ export const useScenarioManager = () => {
         closedAt: new Date().toISOString()
       };
 
-      // AQUÍ OCURRE EL ÚNICO GUARDADO REAL A LA BASE DE DATOS
+      // GUARDADO EN DB (Incluye categoría en el objeto JSONB)
       const success = await BackendService.saveScenario(closedScenario);
 
       if (success) {
@@ -253,6 +298,9 @@ export const useScenarioManager = () => {
           data: closedScenario.calculatedData,
           params: closedScenario.params
         };
+        // Agregar manualmente la categoría al logEntry temporal si es necesario para UI inmediata, 
+        // aunque `getHistory` luego lo traerá del backend.
+        (logEntry as any).category = closedScenario.category;
 
         setScenarios(prev => prev.map(s => s.id === activeScenarioId ? closedScenario : s));
         setHistory(prev => [logEntry, ...prev]);
@@ -273,19 +321,27 @@ export const useScenarioManager = () => {
   const updateParams = (newParams: Partial<Scenario['params']>) => {
     if (!activeScenario || activeScenario.status === ScenarioStatus.CLOSED) return;
     const updated = { ...activeScenario, params: { ...activeScenario.params, ...newParams } };
-    updated.calculatedData = calculateScenarioPrices(updated.params, updated.coefficients);
+    
+    // Pasar la categoría actual al calculador
+    updated.calculatedData = calculateScenarioPrices(updated.params, updated.coefficients, updated.category || 'LIFT');
+    
     setScenarios(scenarios.map(s => s.id === activeScenarioId ? updated : s));
   };
 
   const updateCoefficient = (day: number, value: number) => {
     if (!activeScenario || activeScenario.status === ScenarioStatus.CLOSED) return;
     const updated = { ...activeScenario, coefficients: activeScenario.coefficients.map(c => c.day === day ? { ...c, value } : c) };
-    updated.calculatedData = calculateScenarioPrices(updated.params, updated.coefficients);
+    
+    updated.calculatedData = calculateScenarioPrices(updated.params, updated.coefficients, updated.category || 'LIFT');
+    
     setScenarios(scenarios.map(s => s.id === activeScenarioId ? updated : s));
   };
 
   return {
-    scenarios, 
+    scenarios, // Devuelve todos (o podrías devolver filteredScenarios si quisieras forzarlo)
+    filteredScenarios, // NUEVO: Para usar en el Header
+    selectedCategory, // NUEVO
+    setSelectedCategory, // NUEVO
     activeScenarioId, 
     activeScenario, 
     history, 
@@ -299,8 +355,8 @@ export const useScenarioManager = () => {
     createScenario, 
     duplicateScenario, 
     renameScenario,
-    updateSeason, // Nueva exportación
-    discardDraft, // Nueva exportación
+    updateSeason, 
+    discardDraft, 
     closeScenario, 
     updateParams, 
     updateCoefficient
