@@ -110,7 +110,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
   // Handler específico para precios de rental
   const handleRentalPriceChange = (itemId: string, value: string) => {
     if (isReadOnly) return;
-    const currentPrices = { ...scenario.params.rentalBasePrices } || {};
+    const currentPrices = { ...scenario.params.rentalBasePrices };
     currentPrices[itemId] = parseFloat(value) || 0;
     onUpdateParams({ rentalBasePrices: currentPrices });
   };

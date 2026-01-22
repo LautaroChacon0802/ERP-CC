@@ -1,191 +1,200 @@
 import React, { useState, useMemo } from 'react';
-import { HistoryLogEntry, PricingRow } from '../types';
+import { HistoryLogEntry, ScenarioCategory, PricingRow, RentalItem } from '../types';
 import { formatCurrency, formatDecimal } from '../utils';
-import { ArrowRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { getItemsByCategory } from '../constants';
+import { GitCompare, AlertTriangle, ArrowRight } from 'lucide-react';
 
 interface Props {
   history: HistoryLogEntry[];
+  currentCategory: ScenarioCategory;
+  activeScenarioName: string;
+  activeScenarioData: PricingRow[];
 }
 
-const ComparisonSheet: React.FC<Props> = ({ history }) => {
-  // State for selected scenarios
-  const [selectedIdA, setSelectedIdA] = useState<string>('');
-  const [selectedIdB, setSelectedIdB] = useState<string>('');
+const ComparisonSheet: React.FC<Props> = ({ 
+    history, 
+    currentCategory, 
+    activeScenarioName,
+    activeScenarioData 
+}) => {
+  const [compareId, setCompareId] = useState<string>('');
 
-  // Memoized lookups
-  const scenarioA = useMemo(() => history.find(h => h.scenarioId === selectedIdA), [history, selectedIdA]);
-  const scenarioB = useMemo(() => history.find(h => h.scenarioId === selectedIdB), [history, selectedIdB]);
+  // --- LÓGICA DE FILTRADO (Peras con Manzanas) ---
+  const compatibleHistory = useMemo(() => {
+    return history.filter(entry => {
+        const entryCat = entry.category || 'LIFT';
+        
+        // Regla 1: Alpino solo con Alpino
+        if (currentCategory === 'RENTAL_ALPINO') return entryCat === 'RENTAL_ALPINO';
+        
+        // Regla 2: Medios solo con Medios
+        if (currentCategory === 'LIFT') return entryCat === 'LIFT';
 
-  // Comparison Logic
-  const comparisonData = useMemo(() => {
-    if (!scenarioA || !scenarioB) return [];
+        // Regla 3: Rentals de Esquí (Base, Morada, Ciudad) se pueden comparar entre sí
+        // Esto permite comparar precios de la Base vs la Ciudad.
+        const isSkiRental = (c: string) => ['RENTAL_MOUNTAIN', 'RENTAL_CITY'].includes(c);
+        if (isSkiRental(currentCategory)) return isSkiRental(entryCat);
 
-    // Map rows by days to align them
-    const mapA = new Map<number, PricingRow>(scenarioA.data.map(r => [r.days, r]));
-    const mapB = new Map<number, PricingRow>(scenarioB.data.map(r => [r.days, r]));
-    
-    // Get all unique days from both (usually they are the same, but for safety)
-    const allDays = Array.from(new Set([...Array.from(mapA.keys()), ...Array.from(mapB.keys())])).sort((a, b) => a - b);
-
-    return allDays.map(days => {
-      const rowA = mapA.get(days);
-      const rowB = mapB.get(days);
-
-      const priceA = rowA?.adultRegularVisual || 0;
-      const priceB = rowB?.adultRegularVisual || 0;
-
-      const diffVal = priceB - priceA;
-      const diffPercent = priceA !== 0 ? (diffVal / priceA) * 100 : 0;
-
-      return {
-        days,
-        priceA,
-        priceB,
-        diffVal,
-        diffPercent,
-        existsInBoth: rowA && rowB
-      };
+        return false;
     });
-  }, [scenarioA, scenarioB]);
+  }, [history, currentCategory]);
 
-  if (history.length < 2) {
-    return (
-      <div className="p-10 text-center bg-gray-50 border border-dashed border-gray-300 rounded-lg m-6">
-        <p className="text-gray-500 text-lg">Se necesitan al menos 2 escenarios en el historial para realizar una comparación.</p>
-      </div>
-    );
+  const compareEntry = history.find(h => h.scenarioId === compareId);
+
+  // Determinar qué columnas mostrar (Rental Items o LIFT columns)
+  const isRental = currentCategory !== 'LIFT';
+  const displayItems = isRental ? getItemsByCategory(currentCategory) : [];
+
+  // Helper para calcular diferencia porcentual
+  const getDiff = (curr: number, old: number) => {
+    if (!old) return { val: '-', cls: 'text-gray-400' };
+    const diff = ((curr - old) / old) * 100;
+    const sign = diff > 0 ? '+' : '';
+    const cls = diff > 0 ? 'text-red-600 font-bold' : diff < 0 ? 'text-green-600 font-bold' : 'text-gray-400';
+    return { val: `${sign}${diff.toFixed(1)}%`, cls };
+  };
+
+  // Helper para renderizar celda de comparación
+  const CompareCell = ({ curr, old, isCurrency = true }: { curr: number, old: number, isCurrency?: boolean }) => {
+      const { val, cls } = getDiff(curr, old);
+      return (
+          <div className="flex flex-col items-end">
+              <span className="font-bold text-gray-800">{isCurrency ? formatCurrency(curr) : formatDecimal(curr)}</span>
+              <div className="flex gap-2 text-xs">
+                  <span className="text-gray-400 line-through">{isCurrency ? formatCurrency(old) : formatDecimal(old)}</span>
+                  <span className={cls}>{val}</span>
+              </div>
+          </div>
+      );
+  };
+
+  if (compatibleHistory.length === 0) {
+     return (
+        <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-300 mt-4">
+            <AlertTriangle className="mx-auto mb-2 opacity-50" size={32} />
+            <p>No hay tarifarios históricos compatibles para comparar con la categoría actual ({currentCategory}).</p>
+        </div>
+     );
   }
 
   return (
-    <div className="p-6 bg-white min-h-[500px]">
-      <div className="mb-8">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-           Comparador de Escenarios
-        </h2>
-        <p className="text-sm text-gray-500">Analice la variación de precios entre dos versiones históricas.</p>
-      </div>
-
-      {/* SELECTORS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-8 bg-gray-50 p-4 rounded-lg border">
-        
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Escenario Base (A)</label>
-          <select 
-            value={selectedIdA} 
-            onChange={e => setSelectedIdA(e.target.value)}
-            className="block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">-- Seleccionar --</option>
-            {history.map(h => (
-              <option key={h.scenarioId} value={h.scenarioId} disabled={h.scenarioId === selectedIdB}>
-                {h.season} | {h.name}
-              </option>
-            ))}
-          </select>
-          {scenarioA && (
-             <div className="text-xs text-gray-500 mt-1">
-                Base Adulto: {formatCurrency(scenarioA.params.baseRateAdult1Day)}
-             </div>
-          )}
-        </div>
-
-        <div className="flex justify-center">
-            <div className="bg-white p-2 rounded-full border shadow-sm">
-                <ArrowRight className="text-gray-400" />
+    <div className="p-6 bg-white shadow-sm rounded-lg min-h-[500px]">
+      
+      {/* HEADER DE COMPARACIÓN */}
+      <div className="mb-6 flex flex-col md:flex-row items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200 gap-4">
+        <div className="flex items-center gap-3">
+            <div className="bg-white p-2 rounded-full shadow-sm text-castor-red">
+                <GitCompare size={24} />
+            </div>
+            <div>
+                <h2 className="text-lg font-bold text-gray-800">Comparativa de Escenarios</h2>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <span className="font-bold text-gray-900">{activeScenarioName}</span>
+                    <ArrowRight size={14} />
+                    <span>Vs. Histórico</span>
+                </div>
             </div>
         </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Escenario Comparado (B)</label>
-          <select 
-            value={selectedIdB} 
-            onChange={e => setSelectedIdB(e.target.value)}
-            className="block w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">-- Seleccionar --</option>
-            {history.map(h => (
-              <option key={h.scenarioId} value={h.scenarioId} disabled={h.scenarioId === selectedIdA}>
-                {h.season} | {h.name}
-              </option>
-            ))}
-          </select>
-           {scenarioB && (
-             <div className="text-xs text-gray-500 mt-1">
-                Base Adulto: {formatCurrency(scenarioB.params.baseRateAdult1Day)}
-             </div>
-          )}
+        
+        <div className="w-full md:w-1/3">
+            <select
+                value={compareId}
+                onChange={(e) => setCompareId(e.target.value)}
+                className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-castor-red focus:border-castor-red sm:text-sm"
+            >
+                <option value="" disabled>-- Seleccionar Histórico --</option>
+                {compatibleHistory.map(h => (
+                    <option key={h.scenarioId} value={h.scenarioId}>
+                        {h.season} | {h.name} ({h.category || 'LIFT'})
+                    </option>
+                ))}
+            </select>
         </div>
-
       </div>
 
-      {/* COMPARISON TABLE */}
-      {scenarioA && scenarioB && (
-        <div className="overflow-x-auto border rounded-lg shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Días</th>
-                <th className="px-6 py-3 text-right text-xs font-bold text-gray-600 uppercase tracking-wider border-l border-gray-200">
-                    {scenarioA.name}
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    {scenarioB.name}
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wider bg-gray-200 border-l border-white">
-                    Diferencia $
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wider bg-gray-200">
-                    Variación %
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200 font-mono text-sm">
-              {comparisonData.map((row) => {
-                 const isPositive = row.diffVal > 0;
-                 const isNegative = row.diffVal < 0;
-                 const textColor = isPositive ? 'text-green-600' : isNegative ? 'text-castor-red' : 'text-gray-400';
-                 const Icon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus;
+      {compareEntry ? (
+        <div className="overflow-x-auto border rounded-lg">
+             <table className="min-w-full divide-y divide-gray-200 text-right text-sm">
+                <thead className="bg-gray-100">
+                    <tr>
+                        <th className="px-4 py-3 text-left font-bold text-gray-700 w-16 sticky left-0 bg-gray-100 z-10 border-r">Días</th>
+                        
+                        {isRental ? (
+                            displayItems.map(item => (
+                                <th key={item.id} className="px-4 py-3 font-bold text-gray-700 min-w-[140px]">
+                                    {item.label}
+                                </th>
+                            ))
+                        ) : (
+                            <>
+                                <th className="px-4 py-3 font-bold text-gray-700">Adulto Reg</th>
+                                <th className="px-4 py-3 font-bold text-gray-700">Menor Reg</th>
+                                <th className="px-4 py-3 font-bold text-gray-700">Adulto Promo</th>
+                                <th className="px-4 py-3 font-bold text-gray-700">Menor Promo</th>
+                            </>
+                        )}
+                    </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                    {activeScenarioData.map((currRow) => {
+                        // Buscar fila correspondiente en el histórico (mismo día)
+                        const oldRow = compareEntry.data.find(r => r.days === currRow.days);
+                        
+                        // Si no existe el día en el histórico, no comparamos
+                        if (!oldRow) return null;
 
-                 return (
-                  <tr key={row.days} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-left">
-                      {row.days}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-600 border-l">
-                      {formatCurrency(row.priceA)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-gray-900 font-medium">
-                      {formatCurrency(row.priceB)}
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-right font-bold ${textColor} bg-gray-50 border-l`}>
-                      {row.diffVal > 0 ? '+' : ''}{formatCurrency(row.diffVal)}
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-right font-bold ${textColor} bg-gray-50`}>
-                      <div className="flex items-center justify-end gap-1">
-                        {row.diffPercent !== 0 && <Icon size={14} />}
-                        {row.diffPercent > 0 ? '+' : ''}{formatDecimal(row.diffPercent)}%
-                      </div>
-                    </td>
-                  </tr>
-                 );
-              })}
-            </tbody>
-            {/* Footer Summary */}
-             <tfoot className="bg-gray-100 border-t border-gray-300">
-                <tr>
-                    <td colSpan={3} className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">
-                        Promedio de Aumento Total
-                    </td>
-                    <td colSpan={2} className="px-6 py-3 text-center text-sm font-bold text-gray-800">
-                        {(() => {
-                            const totalPct = comparisonData.reduce((acc, curr) => acc + curr.diffPercent, 0);
-                            const avg = totalPct / comparisonData.length;
-                            return `~ ${formatDecimal(avg)}%`;
-                        })()}
-                    </td>
-                </tr>
-            </tfoot>
-          </table>
+                        return (
+                            <tr key={currRow.days} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-left font-bold text-gray-900 border-r sticky left-0 bg-white z-10">
+                                    {currRow.days}
+                                </td>
+
+                                {isRental ? (
+                                    displayItems.map(item => {
+                                        const currVal = currRow.rentalItems?.[item.id]?.visual || 0;
+                                        // Intentamos buscar el mismo item. 
+                                        // Si estamos comparando Base vs Ciudad, el ID del item cambia (mnt_... vs cty_...)
+                                        // Lógica avanzada: Mapeo de items equivalentes si son categorías distintas
+                                        // Simplificación: Buscamos por coincidencia de sufijo (ej: _ski_jr_compl) o mostramos '-'
+                                        
+                                        let oldVal = 0;
+                                        if (oldRow.rentalItems) {
+                                            // 1. Busqueda directa
+                                            if (oldRow.rentalItems[item.id]) {
+                                                oldVal = oldRow.rentalItems[item.id].visual;
+                                            } else {
+                                                // 2. Búsqueda por equivalencia (Base vs Ciudad)
+                                                // items IDs son: 'mnt_...' o 'cty_...'
+                                                const suffix = item.id.substring(3); // remove prefix
+                                                const equivalentKey = Object.keys(oldRow.rentalItems).find(k => k.endsWith(suffix));
+                                                if (equivalentKey) oldVal = oldRow.rentalItems[equivalentKey].visual;
+                                            }
+                                        }
+
+                                        return (
+                                            <td key={item.id} className="px-4 py-3">
+                                                <CompareCell curr={currVal} old={oldVal} />
+                                            </td>
+                                        );
+                                    })
+                                ) : (
+                                    <>
+                                        <td className="px-4 py-3"><CompareCell curr={currRow.adultRegularVisual} old={oldRow.adultRegularVisual} /></td>
+                                        <td className="px-4 py-3"><CompareCell curr={currRow.minorRegularVisual} old={oldRow.minorRegularVisual} /></td>
+                                        <td className="px-4 py-3"><CompareCell curr={currRow.adultPromoVisual} old={oldRow.adultPromoVisual} /></td>
+                                        <td className="px-4 py-3"><CompareCell curr={currRow.minorPromoVisual} old={oldRow.minorPromoVisual} /></td>
+                                    </>
+                                )}
+                            </tr>
+                        );
+                    })}
+                </tbody>
+             </table>
+        </div>
+      ) : (
+        <div className="text-center py-20 text-gray-400 border rounded-lg border-dashed border-gray-200">
+            <GitCompare size={48} className="mx-auto mb-4 opacity-20" />
+            <p>Selecciona un tarifario del menú superior para ver las diferencias línea por línea.</p>
         </div>
       )}
     </div>

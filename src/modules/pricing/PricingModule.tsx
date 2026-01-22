@@ -18,7 +18,7 @@ interface Props {
 
 const PricingModule: React.FC<Props> = ({ onBack }) => {
   const {
-    filteredScenarios, // Usamos la lista filtrada
+    filteredScenarios,
     selectedCategory,
     setSelectedCategory,
     activeScenarioId,
@@ -101,8 +101,6 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
 
       <main className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col max-w-7xl mx-auto w-full z-10">
         
-        {/* HEADER DEL ESCENARIO (SELECTOR) */}
-        {/* Le pasamos 'filteredScenarios' para que el dropdown solo muestre los de la categoría actual */}
         <ScenarioHeader 
           scenarios={filteredScenarios} 
           activeScenarioId={activeScenarioId}
@@ -132,7 +130,6 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
                   onUpdateCoefficient={updateCoefficient}
                 />
               )}
-              {/* Estas vistas las actualizaremos en la ETAPA 4 para soportar múltiples columnas */}
               {activeTab === 'matrix' && (
                 <DataSheet scenario={activeScenario} viewMode="matrix" />
               )}
@@ -143,13 +140,18 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
                 <DataSheet scenario={activeScenario} viewMode="system" />
               )}
               
-              {/* El historial ahora debería filtrar también, pero por ahora muestra todo. 
-                  En una futura mejora podemos pasarle 'category' al HistorySheet */}
               {activeTab === 'history' && (
                 <HistorySheet history={history} />
               )}
+              
+              {/* --- ACTUALIZACIÓN AQUÍ: Pasamos los props de contexto --- */}
               {activeTab === 'compare' && (
-                <ComparisonSheet history={history} />
+                <ComparisonSheet 
+                    history={history}
+                    currentCategory={activeScenario.category || 'LIFT'}
+                    activeScenarioName={activeScenario.name}
+                    activeScenarioData={activeScenario.calculatedData}
+                />
               )}
             </div>
           </div>

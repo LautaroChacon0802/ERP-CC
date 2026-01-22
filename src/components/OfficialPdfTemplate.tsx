@@ -1,197 +1,123 @@
 import React, { forwardRef } from 'react';
-import { Scenario, DateRange } from '../types';
-import { formatCurrency } from '../utils';
+import { Scenario } from '../types';
 import CastorLogo from './CastorLogo';
+import { formatCurrency } from '../utils';
+import { getItemsByCategory } from '../constants';
 
 interface Props {
   scenario: Scenario;
 }
 
-// Fixed subset of days as requested for the official sheet
-const DISPLAY_DAYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
-
 const OfficialPdfTemplate = forwardRef<HTMLDivElement, Props>(({ scenario }, ref) => {
-  const { params } = scenario;
+  const category = scenario.category || 'LIFT';
+  const isRental = category !== 'LIFT';
+  const isAlpino = category === 'RENTAL_ALPINO';
 
-  // Helper to get price for a specific day
-  const getPrice = (day: number, type: 'adultRegular' | 'minorRegular' | 'adultPromo' | 'minorPromo') => {
-    const row = scenario.calculatedData.find(d => d.days === day);
-    if (!row) return '-';
-    
-    let val = 0;
-    switch (type) {
-        case 'adultRegular': val = row.adultRegularVisual; break;
-        case 'minorRegular': val = row.minorRegularVisual; break;
-        case 'adultPromo': val = row.adultPromoVisual; break;
-        case 'minorPromo': val = row.minorPromoVisual; break;
-    }
-    return formatCurrency(val); // Returns $ X.XXX
-  };
+  // 1. Obtener los artículos correspondientes a la categoría
+  const items = isRental ? getItemsByCategory(category) : [];
 
-  // Helper to format date YYYY-MM-DD to DD/MM/YYYY
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '...';
-    try {
-        const date = new Date(dateString + 'T12:00:00'); // Prevent timezone issues
-        return new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
-    } catch (e) {
-        return dateString;
-    }
-  };
-
-  // Helper to format ranges
-  const formatRanges = (ranges: DateRange[]) => {
-      if (!ranges || ranges.length === 0) return '...';
-      return ranges.map(r => `del ${formatDate(r.start)} al ${formatDate(r.end)}`).join(' y ');
-  };
+  // 2. Filtro Especial para Alpino:
+  // El diseño oficial suele ser una hoja A4 vertical/horizontal.
+  // Para Alpino, que tiene tarifas por Hora y por Día, por defecto en este reporte 
+  // mostramos solo los items POR DÍA (Esquí de fondo, Lockers) para mantener la limpieza.
+  // (Si necesitas imprimir lo de por hora, usualmente es otro cartel).
+  const displayItems = isAlpino 
+    ? items.filter(i => i.pricingUnit === 'DAY') 
+    : items;
 
   return (
-    <div ref={ref} id="official-template" className="bg-white text-slate-900 w-[297mm] h-[210mm] px-12 py-8 relative shadow-2xl mx-auto font-sans leading-tight flex flex-col justify-between">
+    <div ref={ref} className="bg-white p-8 w-[1100px] h-auto min-h-[600px] relative text-slate-800" style={{ fontFamily: 'Arial, sans-serif' }}>
       
-      {/* --- HEADER --- */}
-      <div className="flex justify-between items-end border-b-2 border-gray-100 pb-4 mb-2">
-        <div className="flex items-center gap-6">
-             {/* Logo */}
-            <div className="h-14 w-auto">
-                 <CastorLogo className="h-full w-auto" />
-            </div>
-            <div>
-                <h1 className="text-2xl font-bold uppercase tracking-wide text-castor-red leading-none mb-1">
-                  {scenario.name}
-                </h1>
-                <h2 className="text-sm font-medium text-gray-600 uppercase tracking-widest">
-                  Temporada {scenario.season}
-                </h2>
-            </div>
+      {/* HEADER */}
+      <div className="flex justify-between items-end border-b-4 border-castor-red pb-4 mb-6">
+        <div>
+          <h1 className="text-4xl font-black text-castor-red tracking-tighter uppercase">Cerro Castor</h1>
+          <h2 className="text-xl font-bold text-gray-600 mt-1">{scenario.name}</h2>
+          <p className="text-sm text-gray-400 font-medium uppercase tracking-widest mt-1">
+             Temporada {scenario.season} | {isRental ? 'Tarifario de Equipos' : 'Medios de Elevación'}
+          </p>
         </div>
-        
-        <div className="text-right">
-             <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Vigencia</p>
-             <p className="text-sm font-semibold text-gray-600 uppercase">
-                VIGENTE DESDE {formatDate(params.validFrom)} HASTA {formatDate(params.validTo)}
-             </p>
+        <div className="w-24 opacity-90">
+            <CastorLogo />
         </div>
       </div>
 
-      {/* --- CONTENT BLOCK --- */}
-      <div className="flex-1 flex flex-col justify-center gap-6">
-        
-        {/* --- BLOCK 1: TEMPORADA REGULAR --- */}
-        <section>
-            <div className="flex items-baseline justify-between mb-2 border-l-4 border-castor-red pl-3">
-                <h3 className="text-lg font-bold text-slate-800 uppercase">Temporada Regular</h3>
-                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider bg-gray-100 px-2 py-1 rounded">
-                    Vigente {formatRanges(params.regularSeasons)}
-                </span>
-            </div>
-            
-            <table className="w-full border-collapse text-sm">
-                <thead>
-                    <tr className="bg-gray-100 border-t border-b border-gray-300">
-                        <th className="py-1 px-2 text-left font-bold text-gray-700 w-32">CATEGORÍA</th>
-                        {DISPLAY_DAYS.map(day => (
-                            <th key={day} className="py-1 px-1 text-center font-bold text-castor-red text-xs border-l border-gray-200">
-                                {day} {day === 1 ? 'DÍA' : 'DÍAS'}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr className="border-b border-gray-100">
-                        <td className="py-2 px-2 font-bold text-slate-800 text-sm">MAYOR</td>
-                        {DISPLAY_DAYS.map(day => (
-                            <td key={day} className="py-2 px-1 text-center font-medium text-slate-700 border-l border-gray-100">
-                                {getPrice(day, 'adultRegular')}
-                            </td>
-                        ))}
-                    </tr>
-                    <tr className="bg-gray-50/50">
-                        <td className="py-2 px-2 font-bold text-slate-800 text-sm">MENOR</td>
-                        {DISPLAY_DAYS.map(day => (
-                            <td key={day} className="py-2 px-1 text-center font-medium text-slate-600 border-l border-gray-100">
-                                {getPrice(day, 'minorRegular')}
-                            </td>
-                        ))}
-                    </tr>
-                </tbody>
-            </table>
-        </section>
-
-
-        {/* --- BLOCK 2: TEMPORADA PROMOCIONAL --- */}
-        <section>
-            <div className="flex items-baseline justify-between mb-2 border-l-4 border-castor-blue pl-3">
-                <h3 className="text-lg font-bold text-slate-800 uppercase">Temporada Promocional</h3>
-                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider bg-gray-100 px-2 py-1 rounded">
-                    Vigente {formatRanges(params.promoSeasons)}
-                </span>
-            </div>
-            
-            <table className="w-full border-collapse text-sm">
-                <thead>
-                    <tr className="bg-gray-100 border-t border-b border-gray-300">
-                        <th className="py-1 px-2 text-left font-bold text-gray-700 w-32">CATEGORÍA</th>
-                        {DISPLAY_DAYS.map(day => (
-                            <th key={day} className="py-1 px-1 text-center font-bold text-castor-blue text-xs border-l border-gray-200">
-                                {day} {day === 1 ? 'DÍA' : 'DÍAS'}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr className="border-b border-gray-100">
-                        <td className="py-2 px-2 font-bold text-slate-800 text-sm">MAYOR</td>
-                        {DISPLAY_DAYS.map(day => (
-                            <td key={day} className="py-2 px-1 text-center font-medium text-slate-700 border-l border-gray-100">
-                                {getPrice(day, 'adultPromo')}
-                            </td>
-                        ))}
-                    </tr>
-                    <tr className="bg-gray-50/50">
-                        <td className="py-2 px-2 font-bold text-slate-800 text-sm">MENOR</td>
-                        {DISPLAY_DAYS.map(day => (
-                            <td key={day} className="py-2 px-1 text-center font-medium text-slate-600 border-l border-gray-100">
-                                {getPrice(day, 'minorPromo')}
-                            </td>
-                        ))}
-                    </tr>
-                </tbody>
-            </table>
-        </section>
-
+      {/* TABLE */}
+      <div className="w-full">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-100">
+              {/* Columna Días Fija */}
+              <th className="p-3 text-left font-black text-slate-700 uppercase text-xs border-b-2 border-slate-300 w-16">
+                Días
+              </th>
+              
+              {isRental ? (
+                  // HEADER RENTAL (Dinámico)
+                  displayItems.map(item => (
+                      <th key={item.id} className="p-3 text-right font-black text-slate-700 uppercase text-[10px] border-b-2 border-slate-300 leading-tight">
+                          {item.label}
+                      </th>
+                  ))
+              ) : (
+                  // HEADER LIFT (Legacy / Fijo)
+                  <>
+                    <th className="p-3 text-right font-black text-slate-700 uppercase text-xs border-b-2 border-slate-300">Adulto</th>
+                    <th className="p-3 text-right font-black text-slate-700 uppercase text-xs border-b-2 border-slate-300">Menor</th>
+                    <th className="p-3 text-right font-black text-gray-500 uppercase text-xs border-b-2 border-slate-300">Ad. Promo</th>
+                    <th className="p-3 text-right font-black text-gray-500 uppercase text-xs border-b-2 border-slate-300">Men. Promo</th>
+                  </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {scenario.calculatedData.map((row, idx) => (
+              <tr key={row.days} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                {/* Columna Días */}
+                <td className="p-3 text-left font-bold text-slate-900 border-b border-slate-100">
+                    {row.days}
+                </td>
+                
+                {isRental ? (
+                    // BODY RENTAL (Dinámico)
+                    displayItems.map(item => (
+                        <td key={item.id} className="p-3 text-right font-medium text-slate-600 border-b border-slate-100 text-sm">
+                            {/* Verificamos si existe el precio visual para este item */}
+                            {row.rentalItems?.[item.id] 
+                                ? formatCurrency(row.rentalItems[item.id].visual) 
+                                : '-'}
+                        </td>
+                    ))
+                ) : (
+                    // BODY LIFT (Legacy)
+                    <>
+                        <td className="p-3 text-right font-bold text-slate-800 border-b border-slate-100">
+                            {formatCurrency(row.adultRegularVisual)}
+                        </td>
+                        <td className="p-3 text-right font-medium text-slate-600 border-b border-slate-100">
+                            {formatCurrency(row.minorRegularVisual)}
+                        </td>
+                        <td className="p-3 text-right font-medium text-gray-400 border-b border-slate-100">
+                            {formatCurrency(row.adultPromoVisual)}
+                        </td>
+                        <td className="p-3 text-right font-medium text-gray-400 border-b border-slate-100">
+                            {formatCurrency(row.minorPromoVisual)}
+                        </td>
+                    </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* --- FOOTER / LEGALES --- */}
-      <div className="text-[9px] text-gray-500 leading-snug border-t border-gray-200 pt-3 mt-2">
-        <div className="grid grid-cols-3 gap-8">
-            <div className="col-span-2">
-                <p className="mb-1 font-bold uppercase text-gray-600 text-[10px]">Condiciones Generales</p>
-                <div className="grid grid-cols-2 gap-4">
-                    <ul className="list-disc pl-3 space-y-0.5">
-                        <li>Tarifas sujetas a modificaciones sin previo aviso.</li>
-                        <li>Tarifas rack expresadas en $ (pesos argentinos) válidas para mercado extranjero.</li>
-                        <li>Las fechas de inicio y/o fin de temporada pueden sufrir modificaciones según condiciones climáticas.</li>
-                    </ul>
-                    <ul className="list-disc pl-3 space-y-0.5">
-                        <li>Menor: tarifa aplicable a niños de 5 a 11 años inclusive.</li>
-                        <li>Infante (0-4 años) sin cargo. Senior (+70 años) sin cargo.</li>
-                        <li>Tarifas IVA Incluido.</li>
-                    </ul>
-                </div>
-            </div>
-            <div className="text-right flex flex-col justify-end">
-                 <p className="font-bold text-castor-red uppercase text-xs mb-0.5">Cerro Castor</p>
-                 <p>Ushuaia, Tierra del Fuego, Argentina</p>
-                 <p>www.cerrocastor.com</p>
-                 <p>ventas@cerrocastor.com</p>
-            </div>
-        </div>
+      {/* FOOTER */}
+      <div className="mt-8 pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-gray-400">
+        <p>Documento oficial generado el {new Date().toLocaleDateString()}</p>
+        <p>Sistema de Gestión ERP - Cerro Castor</p>
       </div>
-
     </div>
   );
 });
-
-OfficialPdfTemplate.displayName = 'OfficialPdfTemplate';
 
 export default OfficialPdfTemplate;

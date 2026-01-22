@@ -42,11 +42,24 @@ const HistorySheet: React.FC<Props> = ({ history }) => {
     season: selectedEntry.season,
     type: selectedEntry.scenarioType as any,
     status: selectedEntry.status,
+    // AQUÍ ESTÁ LA CORRECCIÓN CLAVE:
+    // Pasamos la categoría del registro histórico al visualizador.
+    // Si es un registro viejo sin categoría, asumimos 'LIFT'.
+    category: selectedEntry.category || 'LIFT', 
     createdAt: '', // No relevante para visualización
     closedAt: selectedEntry.closedAt,
     params: selectedEntry.params,
     coefficients: [], // No necesitamos coeficientes porque usamos la 'data' ya calculada
     calculatedData: selectedEntry.data
+  };
+
+  // Helper para mostrar etiqueta bonita
+  const getCategoryLabel = (cat?: string) => {
+    if (!cat || cat === 'LIFT') return 'MEDIOS DE ELEVACIÓN';
+    if (cat === 'RENTAL_MOUNTAIN') return 'RENTAL BASE/MORADA';
+    if (cat === 'RENTAL_CITY') return 'RENTAL CIUDAD';
+    if (cat === 'RENTAL_ALPINO') return 'RENTAL ALPINO';
+    return cat;
   };
 
   return (
@@ -134,10 +147,8 @@ const HistorySheet: React.FC<Props> = ({ history }) => {
              </div>
              
              <div className="flex gap-2">
-                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${
-                    selectedEntry.scenarioType === 'Final' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-orange-50 text-orange-700 border-orange-200'
-                 }`}>
-                    {selectedEntry.scenarioType}
+                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border bg-blue-50 text-blue-700 border-blue-200`}>
+                    {getCategoryLabel(selectedEntry.category)}
                  </span>
                  <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-gray-100 text-gray-600 border border-gray-200">
                     CERRADO

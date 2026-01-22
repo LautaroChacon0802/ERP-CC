@@ -3,7 +3,7 @@
 // ==========================================
 export type UserRole = 'ADMIN' | 'PRICING_ACCESS' | 'GASTRO_ACCESS' | 'STOCK_ACCESS';
 
-// NUEVO: Categorías de Tarifarios
+// Categorías de Tarifarios
 export type ScenarioCategory = 'LIFT' | 'RENTAL_MOUNTAIN' | 'RENTAL_CITY' | 'RENTAL_ALPINO';
 
 export enum ScenarioType {
@@ -27,14 +27,13 @@ export interface DateRange {
 // RENTAL ARCHITECTURE
 // ==========================================
 
-// NUEVO: Definición de un Artículo de Rental
 export interface RentalItem {
   id: string;
   label: string;
-  category: ScenarioCategory; // A qué rental pertenece
+  category: ScenarioCategory; 
   type: 'SKI' | 'SNOWBOARD' | 'ACCESSORY' | 'OTHER';
-  pricingUnit: 'DAY' | 'HOUR'; // Para Alpino (Hora) vs Resto (Día)
-  isFixedDuration?: boolean; // Para los equipos Premium que son solo x1 día
+  pricingUnit: 'DAY' | 'HOUR'; 
+  isFixedDuration?: boolean; 
 }
 
 // ==========================================
@@ -47,22 +46,17 @@ export interface CoefficientRow {
 }
 
 export interface ScenarioParams {
-  // --- Parámetros Generales ---
-  baseRateAdult1Day: number; // Usado para Pases (LIFT)
+  baseRateAdult1Day: number; 
   increasePercentage: number;
   promoDiscountPercentage: number;
   minorDiscountPercentage: number;
   roundingValue: number;
   
-  // --- Fechas ---
   validFrom: string;
   validTo: string;
   regularSeasons: DateRange[];
   promoSeasons: DateRange[];
 
-  // --- NUEVO: Parámetros de Rental ---
-  // Almacena el Precio Base de cada artículo.
-  // Clave: ItemID (ej: 'mnt_ski_jr_compl'), Valor: Precio Base (Entero)
   rentalBasePrices?: Record<string, number>;
 }
 
@@ -70,9 +64,6 @@ export interface PricingRow {
   days: number;
   coefficient: number;
 
-  // --- CAMPOS LEGACY (LIFT) ---
-  // Los mantenemos obligatorios para no romper componentes existentes por ahora.
-  // En escenarios de Rental vendrán en 0.
   adultRegularRaw: number;
   adultPromoRaw: number;
   minorRegularRaw: number;
@@ -88,13 +79,10 @@ export interface PricingRow {
   minorRegularDailySystem: number;
   minorPromoDailySystem: number;
 
-  // --- NUEVO: CAMPOS RENTAL ---
-  // Estructura dinámica para N artículos.
-  // Clave: ItemID
   rentalItems?: Record<string, {
-    raw: number;         // Precio calculado crudo
-    visual: number;      // Precio redondeado (Visual)
-    dailySystem: number; // Precio diario truncado 4 decimales (Sistema)
+    raw: number;         
+    visual: number;      
+    dailySystem: number; 
   }>;
 }
 
@@ -108,7 +96,6 @@ export interface Scenario {
   createdAt: string;
   closedAt?: string;
   
-  // NUEVO: Categoría del escenario (Opcional para compatibilidad hacia atrás, pero idealmente obligatorio)
   category?: ScenarioCategory; 
   
   params: ScenarioParams;
@@ -123,11 +110,11 @@ export interface HistoryLogEntry {
   scenarioType: string;
   status: ScenarioStatus;
   closedAt: string;
+  category: ScenarioCategory; // <--- CAMBIO CRÍTICO: CAMPO AGREGADO
   data: PricingRow[];
   params: ScenarioParams;
 }
 
-// Auth Types
 export interface User {
   email: string;
   name: string;
