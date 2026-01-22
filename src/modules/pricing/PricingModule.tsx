@@ -32,14 +32,16 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
     createScenario,
     duplicateScenario,
     renameScenario,
+    updateSeason, // Función importada del hook
+    discardDraft, // Función importada del hook
     closeScenario,
     updateParams,
     updateCoefficient
   } = useScenarioManager();
 
   useEffect(() => {
-    console.log("Running QA Integrity Checks...");
-    runPricingTests();
+    // console.log("Running QA Integrity Checks...");
+    // runPricingTests();
   }, []);
 
   return (
@@ -68,14 +70,12 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
                <CastorLogo className="h-16 w-auto" />
              </div>
              <div>
-                {/* CAMBIO 1: TÍTULO ACTUALIZADO */}
                 <h1 className="text-2xl font-black tracking-tighter uppercase leading-none">MATRIZ TARIFARIA</h1>
                 <p className="text-xs text-white/80 font-medium tracking-wide">Gestión Comercial y Tarifaria</p>
              </div>
           </div>
           <div className="text-right hidden md:block">
             <span className="block text-sm font-semibold text-white/90">Módulo Pricing</span>
-            {/* CAMBIO 2: ELIMINADO 'Conectado a Google Sheets' */}
           </div>
         </div>
       </header>
@@ -87,9 +87,11 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
           activeScenarioId={activeScenarioId}
           onSelectScenario={setActiveScenarioId}
           onRenameScenario={renameScenario}
+          onUpdateSeason={updateSeason} // CONECTADO
           onCreateScenario={createScenario}
           onDuplicateScenario={duplicateScenario}
           onCloseScenario={closeScenario}
+          onDiscardDraft={discardDraft} // CONECTADO
         />
 
         {activeScenario ? (

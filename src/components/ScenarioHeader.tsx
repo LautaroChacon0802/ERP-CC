@@ -1,15 +1,17 @@
 import React from 'react';
 import { Scenario, ScenarioStatus } from '../types';
-import { Plus, Copy, Lock, Edit2 } from 'lucide-react';
+import { Plus, Copy, Save, XCircle } from 'lucide-react';
 
 interface Props {
   scenarios: Scenario[];
   activeScenarioId: string;
   onSelectScenario: (id: string) => void;
   onRenameScenario: (name: string) => void;
+  onUpdateSeason?: (season: number) => void; // Nuevo prop para editar año
   onCreateScenario: () => void;
   onDuplicateScenario: () => void;
   onCloseScenario: () => void;
+  onDiscardDraft?: () => void; // Nuevo prop para cancelar
 }
 
 const ScenarioHeader: React.FC<Props> = ({
@@ -17,113 +19,114 @@ const ScenarioHeader: React.FC<Props> = ({
   activeScenarioId,
   onSelectScenario,
   onRenameScenario,
+  onUpdateSeason,
   onCreateScenario,
   onDuplicateScenario,
-  onCloseScenario
+  onCloseScenario,
+  onDiscardDraft
 }) => {
   const activeScenario = scenarios.find(s => s.id === activeScenarioId);
-  const isClosed = activeScenario?.status === ScenarioStatus.CLOSED;
+  const isDraft = activeScenario?.status === ScenarioStatus.DRAFT;
 
   return (
-    <div className="bg-white border-b border-gray-200 p-4 shadow-sm mb-4">
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         
-        {/* Selector & Name Editor */}
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-4 w-full md:w-auto">
-          
-          <div className="flex flex-col">
-            <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Seleccionar Escenario</label>
-            <select
-              value={activeScenarioId}
-              onChange={(e) => onSelectScenario(e.target.value)}
-              className="block w-64 pl-3 pr-10 py-2 text-sm border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md border"
-            >
-              {scenarios.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.season} - {s.name} ({s.status})
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* SECCIÓN IZQUIERDA: SELECTOR Y EDICIÓN */}
+        <div className="flex-1 w-full md:w-auto flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Seleccionar Escenario
+            </label>
+            
+            <div className="flex gap-2">
+                <select
+                    value={activeScenarioId}
+                    onChange={(e) => onSelectScenario(e.target.value)}
+                    className="block w-full md:w-64 border-gray-300 rounded-md shadow-sm focus:ring-castor-red focus:border-castor-red sm:text-sm"
+                >
+                    <option value="" disabled>-- Elegir --</option>
+                    {scenarios.map((s) => (
+                        <option key={s.id} value={s.id}>
+                           {s.season > 0 ? s.season : '----'} | {s.name || '(Sin Nombre)'} {s.status === ScenarioStatus.DRAFT ? '(BORRADOR)' : ''}
+                        </option>
+                    ))}
+                </select>
 
-          {activeScenario && (
-            <div className="flex flex-col w-full md:w-72">
-                 <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">
-                    Nombre del Tarifario { !isClosed && <span className="text-blue-600 ml-1">(Editable)</span> }
-                 </label>
-                 <div className="relative rounded-md shadow-sm">
-                    <input
-                        type="text"
-                        value={activeScenario.name}
-                        disabled={isClosed}
-                        onChange={(e) => onRenameScenario(e.target.value)}
-                        className={`
-                            block w-full sm:text-sm rounded-md transition-colors
-                            ${isClosed 
-                                ? 'bg-gray-100 text-gray-500 border-gray-300 cursor-not-allowed' 
-                                : 'bg-white text-gray-900 border-gray-300 focus:ring-blue-500 focus:border-blue-500 border'}
-                        `}
-                    />
-                    {!isClosed && (
-                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                            <Edit2 className="h-4 w-4 text-gray-400" />
-                        </div>
-                    )}
-                 </div>
+                <button
+                    onClick={onCreateScenario}
+                    disabled={scenarios.some(s => s.status === ScenarioStatus.DRAFT)} // Bloquear si ya hay un borrador
+                    className="flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-castor-red hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Nuevo Borrador"
+                >
+                    <Plus size={16} className="mr-1" /> Nuevo
+                </button>
             </div>
-          )}
 
-          <div className="mt-6 md:mt-4 md:ml-2">
-             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${isClosed ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                {isClosed ? 'CERRADO (SOLO LECTURA)' : 'BORRADOR (EDITABLE)'}
-             </span>
-          </div>
+            {/* BARRA DE EDICIÓN DEL BORRADOR (Solo visible si es Draft) */}
+            {isDraft && activeScenario && (
+                <div className="flex items-center gap-2 mt-2 animate-fadeIn bg-yellow-50 p-2 rounded border border-yellow-200">
+                    <div className="w-24">
+                         <label className="block text-[10px] text-gray-500 font-bold mb-1">AÑO</label>
+                         <input
+                            type="number"
+                            placeholder="Ej: 2026"
+                            // Si es 0 mostramos vacío, si no, el valor
+                            value={activeScenario.season === 0 ? '' : activeScenario.season}
+                            onChange={(e) => onUpdateSeason && onUpdateSeason(parseInt(e.target.value) || 0)}
+                            className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-center h-9"
+                            autoFocus // Foco automático al crear
+                         />
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-[10px] text-gray-500 font-bold mb-1">NOMBRE DEL TARIFARIO</label>
+                        <input
+                            type="text"
+                            placeholder="Ej: Preventa Junio (Escribe un nombre)"
+                            value={activeScenario.name}
+                            onChange={(e) => onRenameScenario(e.target.value)}
+                            className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-9"
+                        />
+                    </div>
+                </div>
+            )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 mt-4 md:mt-0">
-          <button
-            onClick={onCreateScenario}
-            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Nuevo
-          </button>
-          
-          {activeScenario && (
-             <>
-               <button
-                onClick={onDuplicateScenario}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
-                disabled={!isClosed} 
-                title={!isClosed ? "Cierre el escenario actual para crear una copia" : "Duplicar escenario"}
-              >
-                <Copy className="h-4 w-4 mr-1" />
-                Duplicar
-              </button>
+        {/* SECCIÓN DERECHA: ACCIONES */}
+        <div className="flex gap-2 w-full md:w-auto justify-end items-end h-full mt-auto">
+            {isDraft ? (
+                <>
+                    {/* BOTÓN CANCELAR */}
+                    <button
+                        onClick={onDiscardDraft}
+                        className="flex items-center px-4 py-2 border border-red-200 text-sm font-bold rounded-md text-red-600 bg-white hover:bg-red-50 shadow-sm transition-colors h-10"
+                        title="Descartar borrador y volver atrás"
+                    >
+                        <XCircle size={16} className="mr-2" />
+                        Cancelar
+                    </button>
 
-              {!isClosed && (
-                <button
-                  onClick={onCloseScenario}
-                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none shadow-sm"
-                >
-                  <Lock className="h-4 w-4 mr-1" />
-                  Cerrar y Guardar
-                </button>
-              )}
-             </>
-          )}
+                    <button
+                        onClick={onCloseScenario}
+                        className="flex items-center px-4 py-2 border border-transparent text-sm font-bold rounded-md text-white bg-green-600 hover:bg-green-700 shadow-sm transition-colors h-10"
+                        title="Guardar definitivamente en Base de Datos"
+                    >
+                        <Save size={16} className="mr-2" />
+                        Cerrar y Guardar
+                    </button>
+                </>
+            ) : (
+                activeScenario && (
+                    <button
+                        onClick={onDuplicateScenario}
+                        className="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-colors h-10"
+                    >
+                        <Copy size={16} className="mr-2 text-gray-500" />
+                        Clonar Escenario
+                    </button>
+                )
+            )}
         </div>
       </div>
-      
-      {activeScenario && (
-        <div className="mt-3 text-xs text-gray-500 flex flex-wrap gap-4">
-            <span><strong>ID:</strong> {activeScenario.id}</span>
-            <span><strong>Tipo:</strong> {activeScenario.type}</span>
-            <span><strong>Base Origen:</strong> {activeScenario.baseScenarioId ? scenarios.find(s=>s.id === activeScenario.baseScenarioId)?.name : 'N/A'}</span>
-            <span><strong>Creado:</strong> {new Date(activeScenario.createdAt).toLocaleString()}</span>
-        </div>
-      )}
     </div>
   );
 };
