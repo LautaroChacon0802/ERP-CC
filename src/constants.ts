@@ -1,51 +1,64 @@
-
-import { ScenarioType } from "./types";
-
-export const DAYS_LIST = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
-
-// Default coefficients are now DISCOUNT PERCENTAGES.
-// 0 = 0% discount (Full price: Days * Base)
-// 5 = 5% discount, etc.
-export const DEFAULT_COEFFICIENTS: Record<number, number> = {
-  1: 0,    // 0% discount for 1 day
-  2: 2.5,  // 2.5% discount
-  3: 5.0,  // 5% discount
-  4: 7.5,
-  5: 10.0,
-  6: 12.0,
-  7: 14.0,
-  8: 16.0,
-  9: 18.0,
-  10: 20.0,
-  15: 25.0,
-  30: 35.0
-};
-
-export const INITIAL_PARAMS = {
-  baseRateAdult1Day: 10000,
-  increasePercentage: 0,
-  promoDiscountPercentage: 0,
-  minorDiscountPercentage: 30, // Fixed 30%
-  roundingValue: 100, // Default rounding multiple
-  
-  // Default Dates (approximate for typical season)
-  validFrom: '2025-06-20',
-  validTo: '2025-09-30',
-  
-  // Multi-range initialization (Default Seed)
-  promoSeasons: [
-    { id: 'def-promo-1', start: '2025-06-20', end: '2025-07-04' },
-    { id: 'def-promo-2', start: '2025-09-20', end: '2025-09-30' }
-  ],
-  regularSeasons: [
-    { id: 'def-reg-1', start: '2025-07-05', end: '2025-09-19' }
-  ]
-};
+import { ScenarioType, ScenarioCategory, RentalItem } from './types';
 
 export const SCENARIO_TYPES = [
-  ScenarioType.PREVENTA_1,
-  ScenarioType.PREVENTA_2,
-  ScenarioType.PREVENTA_3,
-  ScenarioType.PREVENTA_4,
-  ScenarioType.FINAL,
+  { value: ScenarioType.BASE, label: 'Base' },
+  { value: ScenarioType.DRAFT, label: 'Borrador' },
+  { value: ScenarioType.FINAL, label: 'Final' },
 ];
+
+// NUEVO: Catálogo de Categorías
+export const SCENARIO_CATEGORIES: { id: ScenarioCategory; label: string }[] = [
+  { id: 'LIFT', label: 'Medios de Elevación' },
+  { id: 'RENTAL_MOUNTAIN', label: 'Rental Base / Morada' },
+  { id: 'RENTAL_CITY', label: 'Rental Ciudad' },
+  { id: 'RENTAL_ALPINO', label: 'Rental Alpino' },
+];
+
+export const INITIAL_PARAMS = {
+  baseRateAdult1Day: 0,
+  increasePercentage: 0,
+  promoDiscountPercentage: 0,
+  minorDiscountPercentage: 0,
+  roundingValue: 100,
+  validFrom: '',
+  validTo: '',
+  regularSeasons: [],
+  promoSeasons: [],
+  rentalBasePrices: {} // Inicializamos vacío
+};
+
+// ==========================================
+// CATÁLOGO DE ARTÍCULOS DE RENTAL
+// ==========================================
+
+export const RENTAL_ITEMS: RentalItem[] = [
+  // --- RENTAL BASE / MORADA (mnt) ---
+  { id: 'mnt_ski_jr_compl', label: 'Esquí Junior + Botas + Bastones', category: 'RENTAL_MOUNTAIN', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'mnt_ski_ad_std_compl', label: 'Esquí Adulto Std + Botas + Bastones', category: 'RENTAL_MOUNTAIN', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'mnt_ski_ad_high_compl', label: 'Esquí Adulto Gama Alta + Botas + Bastones', category: 'RENTAL_MOUNTAIN', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'mnt_ski_ad_high_only', label: 'Esquí Adulto Gama Alta (Solo Tablas)', category: 'RENTAL_MOUNTAIN', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'mnt_ski_ad_prem_compl', label: 'Esquí Adulto Premium + Botas + Bastones', category: 'RENTAL_MOUNTAIN', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: true }, // Solo x1 día
+  { id: 'mnt_ski_ad_prem_only', label: 'Esquí Adulto Premium (Solo Tablas)', category: 'RENTAL_MOUNTAIN', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: true }, // Solo x1 día
+  { id: 'mnt_snow_ad_compl', label: 'Snowboard + Botas', category: 'RENTAL_MOUNTAIN', type: 'SNOWBOARD', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'mnt_helmet', label: 'Casco', category: 'RENTAL_MOUNTAIN', type: 'ACCESSORY', pricingUnit: 'DAY', isFixedDuration: false },
+
+  // --- RENTAL CIUDAD (cty) ---
+  { id: 'cty_ski_jr_compl', label: 'Esquí Junior + Botas + Bastones', category: 'RENTAL_CITY', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'cty_ski_ad_std_compl', label: 'Esquí Adulto Std + Botas + Bastones', category: 'RENTAL_CITY', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'cty_ski_ad_std_only', label: 'Esquí Adulto Std (Solo Tablas)', category: 'RENTAL_CITY', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false }, // Exclusivo Ciudad
+  { id: 'cty_ski_ad_high_compl', label: 'Esquí Adulto Gama Alta + Botas + Bastones', category: 'RENTAL_CITY', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'cty_ski_ad_prem_compl', label: 'Esquí Adulto Premium + Botas + Bastones', category: 'RENTAL_CITY', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false }, // Nota: En ciudad no especificaste que fuera solo x1 día, lo dejo libre.
+  { id: 'cty_snow_ad_compl', label: 'Snowboard + Botas', category: 'RENTAL_CITY', type: 'SNOWBOARD', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'cty_snow_ad_only', label: 'Snowboard (Solo Tablas)', category: 'RENTAL_CITY', type: 'SNOWBOARD', pricingUnit: 'DAY', isFixedDuration: false }, // Exclusivo Ciudad
+  { id: 'cty_helmet', label: 'Casco', category: 'RENTAL_CITY', type: 'ACCESSORY', pricingUnit: 'DAY', isFixedDuration: false },
+
+  // --- RENTAL ALPINO (alp) ---
+  { id: 'alp_raquetas', label: 'Raquetas de Nieve', category: 'RENTAL_ALPINO', type: 'OTHER', pricingUnit: 'HOUR', isFixedDuration: false },
+  { id: 'alp_skates_minor', label: 'Patines Hielo (Menor)', category: 'RENTAL_ALPINO', type: 'OTHER', pricingUnit: 'HOUR', isFixedDuration: false },
+  { id: 'alp_skates_adult', label: 'Patines Hielo (Adulto)', category: 'RENTAL_ALPINO', type: 'OTHER', pricingUnit: 'HOUR', isFixedDuration: false },
+  { id: 'alp_nordic', label: 'Esquí Nórdico (Fondo)', category: 'RENTAL_ALPINO', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
+  { id: 'alp_locker', label: 'Locker', category: 'RENTAL_ALPINO', type: 'OTHER', pricingUnit: 'DAY', isFixedDuration: false },
+];
+
+// Helper para obtener items por categoría
+export const getItemsByCategory = (cat: string) => RENTAL_ITEMS.filter(i => i.category === cat);
