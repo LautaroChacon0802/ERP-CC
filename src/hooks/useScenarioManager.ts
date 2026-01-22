@@ -86,10 +86,9 @@ export const useScenarioManager = () => {
             notify("Sistema inicializado con configuración base", "info");
         } else {
             // CASO B: SI hay historial (SOLUCIÓN DEL ERROR DE PANTALLA BLANCA)
-            // Transformamos el historial en escenarios activos para que la UI tenga qué mostrar
             const loadedScenarios: Scenario[] = migratedHistory.map(h => ({
                 id: h.scenarioId,
-                name: h.name || 'Escenario Recuperado', // Fallback por si el nombre viene vacío del CSV
+                name: h.name || 'Escenario Recuperado',
                 season: h.season,
                 type: h.scenarioType as ScenarioType,
                 baseScenarioId: null,
@@ -97,13 +96,12 @@ export const useScenarioManager = () => {
                 createdAt: h.closedAt || new Date().toISOString(),
                 closedAt: h.closedAt,
                 params: h.params,
-                coefficients: configCoefs, // Usamos los coeficientes actuales como referencia
+                coefficients: configCoefs,
                 calculatedData: h.data
             }));
 
             setScenarios(loadedScenarios);
             
-            // Seleccionamos automáticamente el primero (el más reciente)
             if (loadedScenarios.length > 0) {
                 setActiveScenarioId(loadedScenarios[0].id);
             }
@@ -139,7 +137,6 @@ export const useScenarioManager = () => {
     saveTimeoutRef.current = window.setTimeout(() => {
         BackendService.saveDraft(activeScenario)
             .then(() => {
-                // Silent success for drafts, or debug log
                 console.log("Draft auto-saved");
             })
             .catch(err => {
@@ -155,11 +152,8 @@ export const useScenarioManager = () => {
 
   // --- ACTIONS ---
 
-  const getNextScenarioType = (current: ScenarioType): ScenarioType => {
-    const idx = SCENARIO_TYPES.indexOf(current);
-    if (idx >= 0 && idx < SCENARIO_TYPES.length - 1) return SCENARIO_TYPES[idx + 1];
-    return ScenarioType.FINAL;
-  };
+  // NOTA: Función auxiliar eliminada intencionalmente para no forzar tipos automáticos
+  // const getNextScenarioType = ...
 
   const createScenario = () => {
     if (!activeScenario) {
@@ -178,13 +172,14 @@ export const useScenarioManager = () => {
     const newBaseRate = baseRow ? baseRow.adultRegularVisual : activeScenario.params.baseRateAdult1Day;
 
     const newId = `sc-${Date.now()}`;
-    const newType = getNextScenarioType(activeScenario.type);
     
+    // CAMBIO 3: Lógica de creación manual
+    // Ya no sumamos año automáticamente ni imponemos nombres como "Final - Borrador"
     const newScenario: Scenario = {
       id: newId,
-      name: `${newType} - Borrador`,
-      season: activeScenario.season + (activeScenario.type === ScenarioType.FINAL ? 1 : 0),
-      type: newType,
+      name: "Nuevo Escenario", // Nombre genérico para que el usuario lo edite
+      season: activeScenario.season, // Mantiene el año actual, NO suma 1
+      type: ScenarioType.FINAL, // Por defecto Final, editable luego si se desea
       baseScenarioId: activeScenario.id,
       status: ScenarioStatus.DRAFT,
       createdAt: new Date().toISOString(),
@@ -193,7 +188,6 @@ export const useScenarioManager = () => {
         baseRateAdult1Day: newBaseRate,
         validFrom: activeScenario.params.validFrom,
         validTo: activeScenario.params.validTo,
-        // Copy seasons with new unique IDs for safety
         promoSeasons: activeScenario.params.promoSeasons.map(s => ({...s, id: `promo-${Date.now()}-${Math.random().toString(36).substr(2,5)}`})),
         regularSeasons: activeScenario.params.regularSeasons.map(s => ({...s, id: `reg-${Date.now()}-${Math.random().toString(36).substr(2,5)}`}))
       },
@@ -206,7 +200,7 @@ export const useScenarioManager = () => {
     setScenarios([...scenarios, newScenario]);
     setActiveScenarioId(newId);
     setActiveTab('params');
-    notify("Nuevo escenario borrador creado", "success");
+    notify("Nuevo escenario creado. Puedes editar el nombre arriba.", "success");
   };
 
   const duplicateScenario = () => {
@@ -246,10 +240,10 @@ export const useScenarioManager = () => {
     if (!activeScenario) return;
     if (activeScenario.status !== ScenarioStatus.DRAFT) return;
 
-    if (!window.confirm(`¿Confirmar cierre de tarifario "${activeScenario.name}"?\n\nAl cerrar, se guardará en la BASE DE DATOS de Google Sheets y no podrá ser editado.`)) return;
+    if (!window.confirm(`¿Confirmar cierre de tarifario "${activeScenario.name}"?\n\nAl cerrar, se guardará en la BASE DE DATOS y no podrá ser editado.`)) return;
 
     setIsLoading(true);
-    setLoadingMessage('Guardando escenario en Google Sheets...');
+    setLoadingMessage('Guardando escenario...');
 
     try {
       const closedScenario: Scenario = {

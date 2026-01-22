@@ -8,7 +8,7 @@ interface Props {
   onUpdateParams: (params: Partial<Scenario['params']>) => void;
 }
 
-// Sub-component for rendering a list of date ranges to prevent focus loss issues
+// Sub-component for rendering a list of date ranges
 const DateRangeSection = ({
   title,
   ranges,
@@ -96,7 +96,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
 
   const handleChange = (field: keyof Scenario['params'], value: string) => {
     if (isReadOnly) return;
-    // Handle top-level fields (dates or numbers)
     const isDate = field === 'validFrom' || field === 'validTo';
     const finalValue = isDate ? value : (parseFloat(value) || 0);
     onUpdateParams({ [field]: finalValue });
@@ -154,6 +153,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                 disabled={isReadOnly}
                 value={scenario.params.baseRateAdult1Day}
                 onChange={(e) => handleChange('baseRateAdult1Day', e.target.value)}
+                onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
                 className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-7 pr-12 sm:text-lg border-gray-300 rounded-md ${isReadOnly ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-900'}`}
               />
             </div>
@@ -169,6 +169,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                 disabled={isReadOnly}
                 value={scenario.params.increasePercentage}
                 onChange={(e) => handleChange('increasePercentage', e.target.value)}
+                onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
                 className="focus:ring-orange-500 focus:border-orange-500 block w-full pr-12 sm:text-lg border-gray-300 rounded-md"
               />
               <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -190,6 +191,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                   disabled={isReadOnly}
                   value={scenario.params.promoDiscountPercentage}
                   onChange={(e) => handleChange('promoDiscountPercentage', e.target.value)}
+                  onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
                   className="focus:ring-green-500 focus:border-green-500 block w-full pr-8 sm:text-lg border-gray-300 rounded-md"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -208,6 +210,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                   disabled={isReadOnly}
                   value={scenario.params.minorDiscountPercentage}
                   onChange={(e) => handleChange('minorDiscountPercentage', e.target.value)}
+                  onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
                   className="focus:ring-purple-500 focus:border-purple-500 block w-full pr-8 sm:text-lg border-gray-300 rounded-md"
                 />
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -229,6 +232,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                 disabled={isReadOnly}
                 value={scenario.params.roundingValue}
                 onChange={(e) => handleChange('roundingValue', e.target.value)}
+                onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
                 className="focus:ring-gray-500 focus:border-gray-500 block w-full pl-7 sm:text-lg border-gray-300 rounded-md"
               />
             </div>
@@ -242,7 +246,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-
           {/* VIGENCIA GENERAL */}
           <div className="col-span-1 md:col-span-2 bg-slate-50 p-5 rounded-lg border border-slate-200">
             <h4 className="font-bold text-sm text-slate-700 uppercase mb-4 tracking-wide border-b pb-2">Vigencia General del Tarifario</h4>

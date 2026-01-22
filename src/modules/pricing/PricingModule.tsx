@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 import { useScenarioManager } from '../../hooks/useScenarioManager';
 import ScenarioHeader from '../../components/ScenarioHeader';
@@ -69,13 +68,14 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
                <CastorLogo className="h-16 w-auto" />
              </div>
              <div>
-                <h1 className="text-2xl font-black tracking-tighter uppercase leading-none">CASTOR TARIFF LAB</h1>
+                {/* CAMBIO 1: TÍTULO ACTUALIZADO */}
+                <h1 className="text-2xl font-black tracking-tighter uppercase leading-none">MATRIZ TARIFARIA</h1>
                 <p className="text-xs text-white/80 font-medium tracking-wide">Gestión Comercial y Tarifaria</p>
              </div>
           </div>
           <div className="text-right hidden md:block">
             <span className="block text-sm font-semibold text-white/90">Módulo Pricing</span>
-            <span className="text-xs text-white/70">Conectado a Google Sheets</span>
+            {/* CAMBIO 2: ELIMINADO 'Conectado a Google Sheets' */}
           </div>
         </div>
       </header>

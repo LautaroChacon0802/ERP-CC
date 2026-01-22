@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import PricingModule from '../modules/pricing/PricingModule';
@@ -73,7 +72,8 @@ const MainLayout: React.FC = () => {
                     <div className="bg-blue-100 p-4 rounded-full mb-4">
                         <DollarSign className="h-8 w-8 text-blue-600" />
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900">Tarifario Montaña</h3>
+                    {/* CAMBIO 1: RENOMBRADO A TARIFARIOS */}
+                    <h3 className="text-lg font-bold text-gray-900">Tarifarios</h3>
                     <p className="text-sm text-gray-500 mt-2">Gestión de escenarios, coeficientes y generación de matrices.</p>
                 </div>
 
@@ -83,7 +83,8 @@ const MainLayout: React.FC = () => {
                     <div className="bg-orange-100 p-4 rounded-full mb-4">
                         <Utensils className="h-8 w-8 text-orange-600" />
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900">Gastronomía</h3>
+                    {/* CAMBIO 2: RENOMBRADO A PRESUPUESTOS */}
+                    <h3 className="text-lg font-bold text-gray-900">Presupuestos</h3>
                     <p className="text-sm text-gray-500 mt-2">Control de menús, costos y puntos de venta.</p>
                 </div>
 
@@ -93,7 +94,8 @@ const MainLayout: React.FC = () => {
                     <div className="bg-green-100 p-4 rounded-full mb-4">
                         <Box className="h-8 w-8 text-green-600" />
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900">Stock Hotelería</h3>
+                    {/* CAMBIO 3: RENOMBRADO A STOCK */}
+                    <h3 className="text-lg font-bold text-gray-900">Stock</h3>
                     <p className="text-sm text-gray-500 mt-2">Inventario de insumos, blancos y amenities.</p>
                 </div>
 

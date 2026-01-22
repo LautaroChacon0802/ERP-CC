@@ -14,7 +14,7 @@ const SheetTabs: React.FC<Props> = ({ activeTab, onTabChange }) => {
     { id: 'coef', label: '2. Coeficientes', icon: <Percent size={16} />, color: 'border-yellow-500' },
     { id: 'matrix', label: '3. Matriz', icon: <Calculator size={16} />, color: 'border-blue-500' },
     { id: 'visual', label: '4. Tarifario', icon: <Eye size={16} />, color: 'border-green-500' },
-    { id: 'system', label: '5. Sistema', icon: <Server size={16} />, color: 'border-purple-500' },
+    { id: 'system', label: '5. Dispongo', icon: <Server size={16} />, color: 'border-purple-500' }, // CAMBIO: Nombre actualizado
     { id: 'history', label: 'Histórico', icon: <History size={16} />, color: 'border-gray-500' },
     { id: 'compare', label: 'Comparar', icon: <GitCompare size={16} />, color: 'border-castor-red' },
   ];
