@@ -1,12 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { PricingRow, Scenario } from '../types';
-import { formatCurrency, formatDecimal, format4Decimals } from '../utils'; // Import updated
+import { PricingRow, Scenario, ScenarioCategory, RentalItem } from '../types';
+import { formatCurrency, formatDecimal, format4Decimals } from '../utils';
+import { getItemsByCategory } from '../constants';
 import { Download, FileSpreadsheet, FileText, Image as ImageIcon, File, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
-import OfficialPdfTemplate from './OfficialPdfTemplate';
 
 type ViewMode = 'matrix' | 'visual' | 'system';
 
@@ -18,23 +18,22 @@ interface Props {
 const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
   const isVisual = viewMode === 'visual';
   const isSystem = viewMode === 'system';
-  const isMatrix = viewMode === 'matrix';
+  const category = scenario.category || 'LIFT';
+  const isRental = category !== 'LIFT';
+  const isAlpino = category === 'RENTAL_ALPINO';
+  
   const tableRef = useRef<HTMLDivElement>(null);
-  const officialTemplateRef = useRef<HTMLDivElement>(null);
   
   // State for export operations
   const [isExporting, setIsExporting] = useState(false);
   
-  // State for Dropdown Menu with grace period
+  // State for Dropdown Menu
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const closeMenuTimeoutRef = useRef<number | null>(null);
 
-  // Clear timeout on unmount
   useEffect(() => {
     return () => {
-      if (closeMenuTimeoutRef.current) {
-        clearTimeout(closeMenuTimeoutRef.current);
-      }
+      if (closeMenuTimeoutRef.current) clearTimeout(closeMenuTimeoutRef.current);
     };
   }, []);
 
@@ -49,122 +48,169 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
   const handleMouseLeaveExport = () => {
     closeMenuTimeoutRef.current = window.setTimeout(() => {
       setIsExportMenuOpen(false);
-    }, 300); // 300ms grace period to allow cursor to move over gap
+    }, 300);
   };
 
+  // --- HELPERS ---
 
   const getTitle = () => {
-    if (isMatrix) return 'Matriz de Cálculo';
-    if (isVisual) return 'Tarifario Visual (Agencias)';
     if (isSystem) return 'Tarifario Sistema (Doblemente)';
-    return '';
+    if (category === 'LIFT') return 'Tarifario Medios de Elevación';
+    if (category === 'RENTAL_ALPINO') return 'Rental Alpino';
+    return 'Tarifario Rental / Equipos';
   };
 
   const getDescription = () => {
-    if (isMatrix) return 'Cálculo técnico: (Base x Días) x (1 - %Dto).';
-    if (isVisual) return 'Aplicando reglas de redondeo: Adulto (Cielo), Menor (Piso).';
-    if (isSystem) return 'Valores DIARIOS truncados a 4 decimales.';
-    return '';
+    if (isSystem) return 'Valores UNITARIOS truncados a 4 decimales para carga en sistema.';
+    if (isVisual) return 'Precios finales redondeados (Visualización Agencias/Público).';
+    return 'Matriz de cálculo cruda (Base x Coeficiente).';
   };
 
-  // --- EXPORT FUNCTIONS ---
+  // --- LOGIC FOR RENTAL COLUMNS ---
+  // If Rental, we get items dynamically.
+  // Special case Alpino: We might need to split tables by Unit (Day vs Hour)
+  const allItems = isRental ? getItemsByCategory(category) : [];
+  
+  // For Alpino, we split items. For others, 'dailyItems' has everything.
+  const hourlyItems = isAlpino ? allItems.filter(i => i.pricingUnit === 'HOUR') : [];
+  const dailyItems = isAlpino ? allItems.filter(i => i.pricingUnit === 'DAY') : allItems;
+
+  const renderValue = (row: PricingRow, itemId?: string, legacyField?: string) => {
+    // 1. RENTAL ITEM LOGIC
+    if (itemId && row.rentalItems && row.rentalItems[itemId]) {
+        const data = row.rentalItems[itemId];
+        if (isSystem) return format4Decimals(data.dailySystem);
+        if (isVisual) return formatCurrency(data.visual);
+        return formatDecimal(data.raw);
+    }
+    // 2. LIFT LEGACY LOGIC
+    if (legacyField) {
+        const val = (row as any)[legacyField]; // Quick access
+        if (isSystem) return format4Decimals(val);
+        if (isVisual && legacyField.includes('Visual')) return formatCurrency(val);
+        return formatDecimal(val);
+    }
+    return '-';
+  };
+
+  // --- EXPORT FUNCTIONS (Updated for Dynamic Columns) ---
 
   const handleExportExcel = () => {
-    const data = scenario.calculatedData.map(row => {
-      const baseObj = { Días: row.days };
-      if (isVisual) {
-        return {
-          ...baseObj,
-          'Adulto Regular': row.adultRegularVisual,
-          'Menor Regular': row.minorRegularVisual,
-          'Adulto Promo': row.adultPromoVisual,
-          'Menor Promo': row.minorPromoVisual
-        };
-      } else if (isSystem) {
-        // EXPORT: SYSTEM VALUES (DAILY, 4 DECIMALS)
-        return {
-          ...baseObj,
-          'Adulto Regular (Diario)': row.adultRegularDailySystem,
-          'Menor Regular (Diario)': row.minorRegularDailySystem,
-          'Adulto Promo (Diario)': row.adultPromoDailySystem,
-          'Menor Promo (Diario)': row.minorPromoDailySystem
-        };
-      } else {
-        return {
-           ...baseObj,
-           '% Dto': row.coefficient,
-           'Adulto Raw': row.adultRegularRaw,
-           'Menor Raw': row.minorRegularRaw
-        };
-      }
-    });
+    // Helper to generate a flat object for a row
+    const generateRowData = (row: PricingRow, items: RentalItem[], unitLabel: string) => {
+        const base = { [unitLabel]: row.days };
+        const values: any = {};
+        
+        if (isRental) {
+            items.forEach(item => {
+                const key = item.label + (isSystem ? ' (Unitario)' : '');
+                const val = row.rentalItems?.[item.id];
+                values[key] = val ? (isSystem ? val.dailySystem : isVisual ? val.visual : val.raw) : 0;
+            });
+        } else {
+            // LIFT
+            if (isSystem) {
+                values['Adulto Reg'] = row.adultRegularDailySystem;
+                values['Menor Reg'] = row.minorRegularDailySystem;
+                values['Adulto Promo'] = row.adultPromoDailySystem;
+                values['Menor Promo'] = row.minorPromoDailySystem;
+            } else {
+                values['Adulto Reg'] = isVisual ? row.adultRegularVisual : row.adultRegularRaw;
+                values['Menor Reg'] = isVisual ? row.minorRegularVisual : row.minorRegularRaw;
+                values['Adulto Promo'] = isVisual ? row.adultPromoVisual : row.adultPromoRaw;
+                values['Menor Promo'] = isVisual ? row.minorPromoVisual : row.minorPromoRaw;
+            }
+        }
+        return { ...base, ...values };
+    };
 
-    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Tarifario");
-    XLSX.writeFile(wb, `Castor_${scenario.name.replace(/\s+/g, '_')}_${viewMode}.xlsx`);
+
+    if (isAlpino) {
+        // Sheet 1: Hours
+        if (hourlyItems.length > 0) {
+            const dataH = scenario.calculatedData.map(r => generateRowData(r, hourlyItems, 'Horas'));
+            const wsH = XLSX.utils.json_to_sheet(dataH);
+            XLSX.utils.book_append_sheet(wb, wsH, "Por Hora");
+        }
+        // Sheet 2: Days
+        if (dailyItems.length > 0) {
+            const dataD = scenario.calculatedData.map(r => generateRowData(r, dailyItems, 'Días'));
+            const wsD = XLSX.utils.json_to_sheet(dataD);
+            XLSX.utils.book_append_sheet(wb, wsD, "Por Día");
+        }
+    } else {
+        // Single Sheet
+        const data = scenario.calculatedData.map(r => generateRowData(r, dailyItems, 'Días'));
+        const ws = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, "Tarifario");
+    }
+
+    XLSX.writeFile(wb, `Castor_${scenario.name}_${viewMode}.xlsx`);
   };
 
   const handleExportPDF = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape for many columns
     
-    // Header
-    doc.setFontSize(18);
-    doc.setTextColor(200, 16, 46); // Brand Red
-    doc.text("CERRO CASTOR", 14, 20);
-    
-    doc.setFontSize(12);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`Tarifario: ${scenario.name} (${scenario.season})`, 14, 28);
-    doc.text(`Tipo: ${getTitle()}`, 14, 34);
-    doc.setFontSize(10);
-    doc.text(`Generado: ${new Date().toLocaleDateString()}`, 14, 40);
+    // Header Wrapper
+    const addHeader = (title: string, y: number) => {
+        doc.setFontSize(14);
+        doc.setTextColor(200, 16, 46);
+        doc.text("CERRO CASTOR", 14, y);
+        doc.setFontSize(10);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`${scenario.name} - ${title}`, 14, y + 6);
+    };
 
-    // Table
-    const headers = isVisual 
-        ? [['Días', 'Adulto Regular', 'Menor Regular', 'Adulto Promo', 'Menor Promo']]
-        : isSystem 
-            ? [['Días', 'Ad. Reg (Diario)', 'Men. Reg (Diario)', 'Ad. Promo (Diario)', 'Men. Promo (Diario)']]
-            : [['Días', '% Dto', 'Adulto Raw', 'Menor Raw', 'Ad. Promo Raw', 'Men. Promo Raw']];
-
-    const body = scenario.calculatedData.map(row => {
-        if (isVisual) {
-            return [
-                row.days, 
-                formatCurrency(row.adultRegularVisual), 
-                formatCurrency(row.minorRegularVisual),
-                formatCurrency(row.adultPromoVisual),
-                formatCurrency(row.minorPromoVisual)
-            ];
-        } else if (isSystem) {
-            // PDF EXPORT: SYSTEM VALUES (DAILY, 4 DECIMALS)
-            return [
-                row.days,
-                format4Decimals(row.adultRegularDailySystem),
-                format4Decimals(row.minorRegularDailySystem),
-                format4Decimals(row.adultPromoDailySystem),
-                format4Decimals(row.minorPromoDailySystem)
-            ];
-        } else {
-            return [
-                row.days,
-                row.coefficient.toFixed(2) + '%',
-                formatDecimal(row.adultRegularRaw),
-                formatDecimal(row.minorRegularRaw),
-                formatDecimal(row.adultPromoRaw),
-                formatDecimal(row.minorPromoRaw)
-            ];
+    const generateTable = (items: RentalItem[], unitLabel: string, startY: number) => {
+        const head = [[unitLabel, ...items.map(i => i.label)]];
+        if (!isRental) {
+             // Hardcoded LIFT headers
+             head[0] = ['Días', 'Adulto Regular', 'Menor Regular', 'Adulto Promo', 'Menor Promo'];
         }
-    });
 
-    autoTable(doc, {
-        head: headers,
-        body: body,
-        startY: 45,
-        theme: 'grid',
-        headStyles: { fillColor: [200, 16, 46] }, // Brand Red
-        styles: { fontSize: 9 }
-    });
+        const body = scenario.calculatedData.map(row => {
+            const firstCol = row.days;
+            if (isRental) {
+                 return [firstCol, ...items.map(i => renderValue(row, i.id))];
+            } else {
+                 return [
+                     firstCol,
+                     renderValue(row, undefined, isSystem ? 'adultRegularDailySystem' : 'adultRegularVisual'),
+                     renderValue(row, undefined, isSystem ? 'minorRegularDailySystem' : 'minorRegularVisual'),
+                     renderValue(row, undefined, isSystem ? 'adultPromoDailySystem' : 'adultPromoVisual'),
+                     renderValue(row, undefined, isSystem ? 'minorPromoDailySystem' : 'minorPromoVisual'),
+                 ];
+            }
+        });
+
+        autoTable(doc, {
+            head,
+            body,
+            startY,
+            theme: 'grid',
+            headStyles: { fillColor: [200, 16, 46], fontSize: 8 },
+            styles: { fontSize: 7, halign: 'right' },
+            columnStyles: { 0: { halign: 'left', fontStyle: 'bold' } }
+        });
+        return (doc as any).lastAutoTable.finalY + 15;
+    };
+
+    let cursorY = 20;
+    
+    if (isAlpino) {
+        if (hourlyItems.length > 0) {
+            addHeader("Tarifas por Hora", cursorY);
+            cursorY = generateTable(hourlyItems, 'Horas', cursorY + 10);
+        }
+        if (dailyItems.length > 0) {
+            addHeader("Tarifas por Día", cursorY);
+            cursorY = generateTable(dailyItems, 'Días', cursorY + 10);
+        }
+    } else {
+        addHeader(getTitle(), cursorY);
+        generateTable(dailyItems, 'Días', cursorY + 10);
+    }
 
     doc.save(`Castor_${scenario.name}_${viewMode}.pdf`);
   };
@@ -172,7 +218,6 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
   const handleExportJPEG = async () => {
     if (!tableRef.current) return;
     setIsExporting(true);
-    // Timeout to allow UI to update (show branding header)
     setTimeout(async () => {
         try {
             const canvas = await html2canvas(tableRef.current!, { scale: 2, backgroundColor: '#ffffff' });
@@ -187,57 +232,39 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
     }, 100);
   };
 
-  // New function to export the Official A4 Template
-  const handleExportOfficial = async () => {
-    if (!officialTemplateRef.current) return;
-    
-    try {
-        // High scale for print quality (A4 @ 300dpi approx)
-        const canvas = await html2canvas(officialTemplateRef.current, { 
-            scale: 2.5, 
-            backgroundColor: '#ffffff',
-            useCORS: true 
-        });
-        const image = canvas.toDataURL("image/jpeg", 0.95);
-        const link = document.createElement("a");
-        link.href = image;
-        link.download = `OFICIAL_Castor_${scenario.name}.jpg`;
-        link.click();
-    } catch (e) {
-        console.error("Error exporting official template", e);
-        alert("Error al generar la imagen oficial.");
-    }
-  };
-
-  const handleExportWord = () => {
-     // Simple HTML to Word Blob
-     const tableHTML = document.getElementById('data-table')?.outerHTML || '';
-     const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-     <head><meta charset='utf-8'><title>Tarifario</title>
-     <style>
-        body { font-family: sans-serif; }
-        table { border-collapse: collapse; width: 100%; } 
-        td, th { border: 1px solid #999; padding: 5px; text-align: right; }
-        th { background-color: #f3f3f3; color: #C8102E; }
-     </style>
-     </head><body>
-     <h1 style="color: #C8102E;">CERRO CASTOR</h1>
-     <h2>${scenario.name} - ${getTitle()}</h2>
-     <p>Temporada: ${scenario.season}</p>
-     `;
-     const postHtml = "</body></html>";
-     const html = preHtml + tableHTML + postHtml;
-
-     const blob = new Blob(['\ufeff', html], {
-         type: 'application/msword'
-     });
-     
-     const url = URL.createObjectURL(blob);
-     const link = document.createElement("a");
-     link.href = url;
-     link.download = `Castor_${scenario.name}_${viewMode}.doc`;
-     link.click();
-  };
+  // --- RENDER TABLE COMPONENT ---
+  const RenderTable = ({ items, unitLabel }: { items: RentalItem[], unitLabel: string }) => (
+    <div className="overflow-x-auto border rounded-lg shadow-sm mb-8">
+        <table className="min-w-full divide-y divide-gray-200 text-right">
+            <thead className={isVisual ? 'bg-red-50' : isSystem ? 'bg-purple-50' : 'bg-blue-50'}>
+                <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider sticky left-0 z-10 bg-inherit border-r">
+                        {unitLabel}
+                    </th>
+                    {items.map(item => (
+                        <th key={item.id} className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider min-w-[120px]">
+                            {item.label}
+                        </th>
+                    ))}
+                </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200 font-mono text-xs">
+                {scenario.calculatedData.map((row) => (
+                    <tr key={row.days} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-left text-gray-900 font-bold sticky left-0 bg-white z-10 border-r">
+                            {row.days}
+                        </td>
+                        {items.map(item => (
+                             <td key={item.id} className="px-4 py-3 text-gray-800">
+                                {renderValue(row, item.id)}
+                             </td>
+                        ))}
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    </div>
+  );
 
   return (
     <div className="p-6 bg-white min-h-[500px]">
@@ -262,11 +289,6 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
                 
                 {isExportMenuOpen && (
                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-20 border animate-in fade-in zoom-in-95 duration-100">
-                        {/* Official Export Option */}
-                        <button onClick={handleExportOfficial} className="w-full text-left px-4 py-3 text-sm font-bold text-castor-red hover:bg-red-50 flex items-center gap-2 border-b">
-                            <Printer size={16} /> Diseño Oficial (.jpg)
-                        </button>
-                        
                         <button onClick={handleExportExcel} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
                             <FileSpreadsheet size={16} className="text-green-600"/> Excel (.xlsx)
                         </button>
@@ -276,94 +298,75 @@ const DataSheet: React.FC<Props> = ({ scenario, viewMode }) => {
                         <button onClick={handleExportJPEG} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
                             <ImageIcon size={16} className="text-blue-600"/> Tabla actual (.jpg)
                         </button>
-                        <button onClick={handleExportWord} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
-                            <File size={16} className="text-blue-800"/> Word (.doc)
-                        </button>
                     </div>
                 )}
             </div>
         </div>
       </div>
 
-      <div ref={tableRef} className={`overflow-x-auto border rounded-lg shadow-sm ${isExporting ? 'p-8 bg-white' : ''}`}>
+      <div ref={tableRef} className={`${isExporting ? 'p-8 bg-white' : ''}`}>
         {isExporting && (
              <div className="mb-6 text-center border-b-2 border-castor-red pb-4">
                  <h1 className="text-3xl font-bold text-castor-red uppercase tracking-wider">Cerro Castor</h1>
                  <h2 className="text-lg text-gray-600 font-semibold mt-1">{scenario.name}</h2>
-                 <p className="text-sm text-gray-500">{getTitle()} | {scenario.season}</p>
              </div>
         )}
-        <table className="min-w-full divide-y divide-gray-200 text-right" id="data-table">
-          <thead className={
-              isVisual ? 'bg-red-50' : isSystem ? 'bg-purple-50' : 'bg-blue-50'
-          }>
-            <tr>
-              <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider sticky left-0 z-10">
-                Días
-              </th>
-              { !isSystem && <th scope="col" className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">% Dto</th> }
-              
-              <th scope="col" className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider border-l border-gray-200">
-                Adulto Regular {isSystem && '(Diario)'}
-              </th>
-              <th scope="col" className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider">
-                Menor Regular {isSystem && '(Diario)'}
-              </th>
-              <th scope="col" className="px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider border-l border-gray-200">
-                Adulto Promo {isSystem && '(Diario)'}
-              </th>
-              <th scope="col" className="px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider">
-                Menor Promo {isSystem && '(Diario)'}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200 font-mono text-sm">
-            {scenario.calculatedData.map((row) => (
-              <tr key={row.days} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-left text-gray-900 font-bold sticky left-0 bg-white z-10 border-r">
-                  {row.days}
-                </td>
-                { !isSystem && <td className="px-4 py-3 text-gray-400 text-xs">{row.coefficient.toFixed(2)}%</td> }
-                
-                {/* Adult Regular */}
-                <td className="px-4 py-3 font-bold text-gray-900 border-l bg-gray-50/50">
-                   {isSystem ? format4Decimals(row.adultRegularDailySystem) : 
-                    isVisual ? formatCurrency(row.adultRegularVisual) : 
-                    formatDecimal(row.adultRegularRaw)}
-                </td>
-                {/* Minor Regular */}
-                <td className="px-4 py-3 text-gray-800">
-                   {isSystem ? format4Decimals(row.minorRegularDailySystem) : 
-                    isVisual ? formatCurrency(row.minorRegularVisual) : 
-                    formatDecimal(row.minorRegularRaw)}
-                </td>
-                 {/* Adult Promo */}
-                <td className="px-4 py-3 text-gray-600 border-l bg-gray-50/50">
-                   {isSystem ? format4Decimals(row.adultPromoDailySystem) : 
-                    isVisual ? formatCurrency(row.adultPromoVisual) : 
-                    formatDecimal(row.adultPromoRaw)}
-                </td>
-                {/* Minor Promo */}
-                <td className="px-4 py-3 text-gray-600">
-                   {isSystem ? format4Decimals(row.minorPromoDailySystem) : 
-                    isVisual ? formatCurrency(row.minorPromoVisual) : 
-                    formatDecimal(row.minorPromoRaw)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+        {/* LOGIC TO RENDER TABLES */}
+        
+        {/* CASE 1: RENTAL ALPINO (SPLIT VIEW) */}
+        {isAlpino ? (
+            <>
+                {hourlyItems.length > 0 && (
+                    <div className="mb-8">
+                        <h3 className="font-bold text-gray-500 uppercase text-xs mb-2">Tarifas por Hora</h3>
+                        <RenderTable items={hourlyItems} unitLabel="Horas" />
+                    </div>
+                )}
+                {dailyItems.length > 0 && (
+                    <div className="mb-8">
+                        <h3 className="font-bold text-gray-500 uppercase text-xs mb-2">Tarifas por Día</h3>
+                        <RenderTable items={dailyItems} unitLabel="Días" />
+                    </div>
+                )}
+            </>
+        ) : isRental ? (
+             /* CASE 2: STANDARD RENTAL (Dynamic Columns) */
+             <RenderTable items={dailyItems} unitLabel="Días" />
+        ) : (
+             /* CASE 3: LIFT LEGACY (Fixed Columns) */
+             <div className="overflow-x-auto border rounded-lg shadow-sm">
+                <table className="min-w-full divide-y divide-gray-200 text-right">
+                  <thead className={isVisual ? 'bg-red-50' : isSystem ? 'bg-purple-50' : 'bg-blue-50'}>
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider sticky left-0 z-10">Días</th>
+                      {!isSystem && <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">% Dto</th>}
+                      <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider">Adulto Reg</th>
+                      <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider">Menor Reg</th>
+                      <th className="px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Adulto Promo</th>
+                      <th className="px-4 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider">Menor Promo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200 font-mono text-sm">
+                    {scenario.calculatedData.map((row) => (
+                      <tr key={row.days} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-left text-gray-900 font-bold sticky left-0 bg-white z-10 border-r">{row.days}</td>
+                        {!isSystem && <td className="px-4 py-3 text-gray-400 text-xs">{row.coefficient.toFixed(2)}%</td>}
+                        <td className="px-4 py-3 font-bold text-gray-900">{renderValue(row, undefined, isSystem ? 'adultRegularDailySystem' : isVisual ? 'adultRegularVisual' : 'adultRegularRaw')}</td>
+                        <td className="px-4 py-3 text-gray-800">{renderValue(row, undefined, isSystem ? 'minorRegularDailySystem' : isVisual ? 'minorRegularVisual' : 'minorRegularRaw')}</td>
+                        <td className="px-4 py-3 text-gray-600">{renderValue(row, undefined, isSystem ? 'adultPromoDailySystem' : isVisual ? 'adultPromoVisual' : 'adultPromoRaw')}</td>
+                        <td className="px-4 py-3 text-gray-600">{renderValue(row, undefined, isSystem ? 'minorPromoDailySystem' : isVisual ? 'minorPromoVisual' : 'minorPromoRaw')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+             </div>
+        )}
         
         <div className="mt-4 p-2 text-xs text-gray-400 text-center border-t">
              Documento generado por Pricing Manager - Cerro Castor
         </div>
       </div>
-
-      {/* --- HIDDEN OFFICIAL TEMPLATE FOR EXPORT --- */}
-      <div className="fixed -top-[9999px] left-0 overflow-hidden">
-         <OfficialPdfTemplate ref={officialTemplateRef} scenario={scenario} />
-      </div>
-
     </div>
   );
 };

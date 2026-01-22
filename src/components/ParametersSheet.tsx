@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { Scenario, ScenarioStatus, DateRange } from '../types';
-import { Calendar, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Calendar, AlertCircle, Plus, Trash2, Tag, DollarSign } from 'lucide-react';
 import { validateScenarioDates } from '../utils';
+import { getItemsByCategory } from '../constants';
 
 interface Props {
   scenario: Scenario;
@@ -90,6 +91,11 @@ const DateRangeSection = ({
 
 const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
   const isReadOnly = scenario.status === ScenarioStatus.CLOSED;
+  const category = scenario.category || 'LIFT';
+  const isRental = category !== 'LIFT';
+  
+  // Obtener items si es rental
+  const rentalItems = useMemo(() => isRental ? getItemsByCategory(category) : [], [category, isRental]);
 
   // Real-time validation
   const dateError = useMemo(() => validateScenarioDates(scenario.params), [scenario.params]);
@@ -99,6 +105,14 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
     const isDate = field === 'validFrom' || field === 'validTo';
     const finalValue = isDate ? value : (parseFloat(value) || 0);
     onUpdateParams({ [field]: finalValue });
+  };
+
+  // Handler específico para precios de rental
+  const handleRentalPriceChange = (itemId: string, value: string) => {
+    if (isReadOnly) return;
+    const currentPrices = { ...scenario.params.rentalBasePrices } || {};
+    currentPrices[itemId] = parseFloat(value) || 0;
+    onUpdateParams({ rentalBasePrices: currentPrices });
   };
 
   // --- Date Range Handlers ---
@@ -125,8 +139,10 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
   };
 
   return (
-    <div className="p-6 bg-white shadow-sm rounded-lg max-w-4xl mx-auto mt-6 mb-12">
-      <h2 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2">Parámetros del Escenario</h2>
+    <div className="p-6 bg-white shadow-sm rounded-lg max-w-5xl mx-auto mt-6 mb-12">
+      <h2 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2">
+         Configuración de Parámetros <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-500 font-normal uppercase">{category.replace('_', ' ')}</span>
+      </h2>
 
       {dateError && (
         <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 flex items-start gap-3 rounded-r animate-pulse">
@@ -138,105 +154,145 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
 
-        <div className="space-y-4">
-          <div className="bg-blue-50 p-4 rounded-md border border-blue-100">
-            <label className="block text-sm font-medium text-blue-900">Tarifa Adulto 1 Día (Base)</label>
-            <p className="text-xs text-blue-700 mb-2">Base inicial para el cálculo (Editable).</p>
-            <div className="mt-1 relative rounded-md shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-gray-500 sm:text-sm">$</span>
-              </div>
-              <input
-                type="number"
-                disabled={isReadOnly}
-                value={scenario.params.baseRateAdult1Day}
-                onChange={(e) => handleChange('baseRateAdult1Day', e.target.value)}
-                onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
-                className={`focus:ring-blue-500 focus:border-blue-500 block w-full pl-7 pr-12 sm:text-lg border-gray-300 rounded-md ${isReadOnly ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-900'}`}
-              />
-            </div>
-          </div>
+        {/* COLUMNA 1: PRECIOS BASE (Dinámica según categoría) */}
+        <div className="lg:col-span-2 space-y-6">
+            
+            {/* CASO 1: PASES (LIFT) */}
+            {!isRental && (
+                <div className="bg-blue-50 p-5 rounded-lg border border-blue-100 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Tag className="text-blue-600" size={18} />
+                        <h3 className="font-bold text-blue-900">Tarifa Base (Pase Diario)</h3>
+                    </div>
+                    <label className="block text-xs font-medium text-blue-700 mb-1">Precio Adulto 1 Día (Base de cálculo)</label>
+                    <div className="relative rounded-md shadow-sm max-w-xs">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span className="text-gray-500 sm:text-sm">$</span>
+                        </div>
+                        <input
+                            type="number"
+                            disabled={isReadOnly}
+                            value={scenario.params.baseRateAdult1Day}
+                            onChange={(e) => handleChange('baseRateAdult1Day', e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-7 pr-12 text-lg font-bold border-gray-300 rounded-md"
+                        />
+                    </div>
+                </div>
+            )}
 
-          <div className="bg-orange-50 p-4 rounded-md border border-orange-100">
-            <label className="block text-sm font-medium text-orange-900">% Aumento Proyectado</label>
-            <p className="text-xs text-orange-700 mb-2">Se aplica sobre la tarifa base.</p>
-            <div className="mt-1 relative rounded-md shadow-sm">
-              <input
-                type="number"
-                step="0.1"
-                disabled={isReadOnly}
-                value={scenario.params.increasePercentage}
-                onChange={(e) => handleChange('increasePercentage', e.target.value)}
-                onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
-                className="focus:ring-orange-500 focus:border-orange-500 block w-full pr-12 sm:text-lg border-gray-300 rounded-md"
-              />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                <span className="text-gray-500 sm:text-sm">%</span>
-              </div>
-            </div>
-          </div>
+            {/* CASO 2: RENTAL (Lista de Artículos) */}
+            {isRental && (
+                <div className="bg-slate-50 p-5 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+                        <Tag className="text-slate-600" size={18} />
+                        <h3 className="font-bold text-slate-800">Precios Base por Artículo (Unitario)</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {rentalItems.map(item => (
+                            <div key={item.id} className="bg-white p-3 rounded border border-gray-200 hover:border-blue-300 transition-colors">
+                                <label className="block text-xs font-bold text-gray-600 mb-1 truncate" title={item.label}>
+                                    {item.label}
+                                </label>
+                                <div className="relative rounded-md shadow-sm">
+                                    <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                                        <span className="text-gray-400 text-xs">$</span>
+                                    </div>
+                                    <input
+                                        type="number"
+                                        disabled={isReadOnly}
+                                        value={scenario.params.rentalBasePrices?.[item.id] || 0}
+                                        onChange={(e) => handleRentalPriceChange(item.id, e.target.value)}
+                                        onFocus={(e) => e.target.select()}
+                                        className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-6 pr-2 py-1 text-sm font-semibold border-gray-300 rounded"
+                                        placeholder="0.00"
+                                    />
+                                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+                                        <span className="text-gray-400 text-[10px]">{item.pricingUnit === 'HOUR' ? '/hora' : '/día'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-3 italic">
+                        * Ingrese el valor base unitario. El sistema aplicará aumentos y coeficientes automáticamente.
+                    </p>
+                </div>
+            )}
         </div>
 
+        {/* COLUMNA 2: AJUSTES GLOBALES */}
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-green-50 p-4 rounded-md border border-green-100">
-              <label className="block text-sm font-medium text-green-900">% Dto. Promo</label>
-              <p className="text-xs text-green-700 mb-2">Temp Baja.</p>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <input
-                  type="number"
-                  step="0.1"
-                  disabled={isReadOnly}
-                  value={scenario.params.promoDiscountPercentage}
-                  onChange={(e) => handleChange('promoDiscountPercentage', e.target.value)}
-                  onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
-                  className="focus:ring-green-500 focus:border-green-500 block w-full pr-8 sm:text-lg border-gray-300 rounded-md"
-                />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 sm:text-sm">%</span>
+            
+            <div className="bg-orange-50 p-4 rounded-md border border-orange-100">
+                <label className="block text-sm font-bold text-orange-900 mb-1">% Aumento Proyectado</label>
+                <p className="text-xs text-orange-700 mb-2">Aplica sobre todos los precios base.</p>
+                <div className="relative rounded-md shadow-sm">
+                    <input
+                        type="number"
+                        step="0.1"
+                        disabled={isReadOnly}
+                        value={scenario.params.increasePercentage}
+                        onChange={(e) => handleChange('increasePercentage', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        className="focus:ring-orange-500 focus:border-orange-500 block w-full pr-12 text-lg font-bold border-gray-300 rounded-md"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <span className="text-gray-500 sm:text-sm">%</span>
+                    </div>
                 </div>
-              </div>
             </div>
 
-            <div className="bg-purple-50 p-4 rounded-md border border-purple-100">
-              <label className="block text-sm font-medium text-purple-900">% Dto. Menor</label>
-              <p className="text-xs text-purple-700 mb-2">Usualmente 30%.</p>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <input
-                  type="number"
-                  step="0.1"
-                  disabled={isReadOnly}
-                  value={scenario.params.minorDiscountPercentage}
-                  onChange={(e) => handleChange('minorDiscountPercentage', e.target.value)}
-                  onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
-                  className="focus:ring-purple-500 focus:border-purple-500 block w-full pr-8 sm:text-lg border-gray-300 rounded-md"
-                />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 sm:text-sm">%</span>
+            <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+                <label className="block text-sm font-bold text-gray-700 mb-1">Múltiplo de Redondeo</label>
+                <p className="text-xs text-gray-500 mb-2">Ajuste final del precio visual.</p>
+                <div className="relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-gray-500 sm:text-sm">$</span>
+                    </div>
+                    <input
+                        type="number"
+                        disabled={isReadOnly}
+                        value={scenario.params.roundingValue}
+                        onChange={(e) => handleChange('roundingValue', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        className="focus:ring-gray-500 focus:border-gray-500 block w-full pl-7 text-lg border-gray-300 rounded-md"
+                    />
                 </div>
-              </div>
             </div>
-          </div>
 
-          <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
-            <label className="block text-sm font-medium text-gray-700">Múltiplo de Redondeo</label>
-            <p className="text-xs text-gray-500 mb-2">Adulto (Cielo), Menor (Piso).</p>
-            <div className="mt-1 relative rounded-md shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-gray-500 sm:text-sm">$</span>
-              </div>
-              <input
-                type="number"
-                disabled={isReadOnly}
-                value={scenario.params.roundingValue}
-                onChange={(e) => handleChange('roundingValue', e.target.value)}
-                onFocus={(e) => e.target.select()} // CAMBIO: SELECCIONAR TODO AL ENFOCAR
-                className="focus:ring-gray-500 focus:border-gray-500 block w-full pl-7 sm:text-lg border-gray-300 rounded-md"
-              />
-            </div>
-          </div>
+            {/* Descuentos de Promo/Menor (Solo relevantes para LIFT, pero los dejamos visibles por si acaso se usan en rental futuro) */}
+            {!isRental && (
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-green-50 p-3 rounded border border-green-100">
+                        <label className="block text-xs font-bold text-green-900 mb-1">% Dto. Promo</label>
+                        <input
+                            type="number"
+                            step="0.1"
+                            disabled={isReadOnly}
+                            value={scenario.params.promoDiscountPercentage}
+                            onChange={(e) => handleChange('promoDiscountPercentage', e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            className="block w-full border-gray-300 rounded-md shadow-sm text-sm"
+                        />
+                    </div>
+                    <div className="bg-purple-50 p-3 rounded border border-purple-100">
+                        <label className="block text-xs font-bold text-purple-900 mb-1">% Dto. Menor</label>
+                        <input
+                            type="number"
+                            step="0.1"
+                            disabled={isReadOnly}
+                            value={scenario.params.minorDiscountPercentage}
+                            onChange={(e) => handleChange('minorDiscountPercentage', e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            className="block w-full border-gray-300 rounded-md shadow-sm text-sm"
+                        />
+                    </div>
+                </div>
+            )}
         </div>
       </div>
 
@@ -246,7 +302,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* VIGENCIA GENERAL */}
           <div className="col-span-1 md:col-span-2 bg-slate-50 p-5 rounded-lg border border-slate-200">
             <h4 className="font-bold text-sm text-slate-700 uppercase mb-4 tracking-wide border-b pb-2">Vigencia General del Tarifario</h4>
             <div className="flex flex-col sm:flex-row gap-6">
@@ -273,7 +328,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
             </div>
           </div>
 
-          {/* SEASONS */}
           <DateRangeSection
             title="Temporada Regular"
             ranges={scenario.params.regularSeasons}
@@ -297,7 +351,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
           />
         </div>
       </div>
-
     </div>
   );
 };
