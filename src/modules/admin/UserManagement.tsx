@@ -12,7 +12,9 @@ import {
   X, 
   Check, 
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Eye,      // Nuevo
+  EyeOff    // Nuevo
 } from 'lucide-react';
 import ToastSystem, { Toast } from '../../components/ToastSystem';
 
@@ -42,10 +44,15 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   
+  // Estados de visibilidad de contraseña
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   // Formulario
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    confirmPassword: '', // Nuevo campo
     fullName: '',
     permissions: [] as string[]
   });
@@ -83,11 +90,16 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   // --- MANEJO DEL FORMULARIO ---
   const handleOpenModal = (userToEdit?: UserProfile) => {
+    // Resetear visibilidad al abrir
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+
     if (userToEdit) {
       setEditingUser(userToEdit);
       setFormData({
         email: userToEdit.email,
-        password: '', // No mostramos password al editar
+        password: '', 
+        confirmPassword: '',
         fullName: userToEdit.full_name,
         permissions: userToEdit.permissions || []
       });
@@ -96,6 +108,7 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       setFormData({
         email: '',
         password: '',
+        confirmPassword: '',
         fullName: '',
         permissions: []
       });
@@ -137,14 +150,20 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       
       // 2. MODO CREACIÓN (Nuevo Usuario)
       else {
+        // VALIDACIONES DE CONTRASEÑA
         if (!formData.password || formData.password.length < 6) {
             notify('La contraseña debe tener al menos 6 caracteres', 'error');
             setIsSubmitting(false);
             return;
         }
 
+        if (formData.password !== formData.confirmPassword) {
+            notify('Las contraseñas NO coinciden', 'error');
+            setIsSubmitting(false);
+            return;
+        }
+
         // TRUCO: Creamos un cliente temporal para no perder la sesión del Admin
-        // Esto permite crear un usuario "auth" sin desloguear al admin actual.
         const tempSupabase = createClient(
           import.meta.env.VITE_SUPABASE_URL,
           import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -155,7 +174,7 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           email: formData.email,
           password: formData.password,
           options: {
-            data: { full_name: formData.fullName } // Metadata inicial
+            data: { full_name: formData.fullName } 
           }
         });
 
@@ -164,7 +183,7 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
         const newUserId = authData.user.id;
 
-        // B. Insertar en tabla Profiles (Usando la sesión del Admin)
+        // B. Insertar en tabla Profiles
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
@@ -175,16 +194,15 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           });
 
         if (profileError) {
-           // Si falla el perfil, intentamos limpiar (opcional, pero buena práctica)
-           console.error("Error creando perfil, el usuario auth quedó huérfano:", profileError);
-           throw new Error("El usuario se creó pero falló al asignar permisos. Contacte a soporte.");
+           console.error("Error creando perfil:", profileError);
+           throw new Error("El usuario se creó pero falló al asignar permisos.");
         }
 
         notify('Usuario creado exitosamente', 'success');
       }
 
       setIsModalOpen(false);
-      fetchUsers(); // Recargar lista
+      fetchUsers(); 
 
     } catch (error: any) {
       console.error('Error saving user:', error);
@@ -194,20 +212,14 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
-  // --- ELIMINAR USUARIO ---
   const handleDelete = async (userId: string) => {
     if (!window.confirm('¿Estás seguro? Esto eliminará el acceso del usuario al sistema.')) return;
-
     try {
-      // Eliminamos el perfil. Nota: Esto no borra al usuario de Auth (requiere API Admin),
-      // pero al no tener perfil, el sistema no le dejará entrar o cargar datos.
       const { error } = await supabase
         .from('profiles')
         .delete()
         .eq('id', userId);
-
       if (error) throw error;
-      
       notify('Usuario eliminado del sistema', 'success');
       fetchUsers();
     } catch (error) {
@@ -297,7 +309,7 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                         >
                                             <Edit2 size={18} />
                                         </button>
-                                        {currentUser?.id !== u.id && ( // No permitir borrarse a uno mismo
+                                        {currentUser?.id !== u.id && ( 
                                             <button 
                                                 onClick={() => handleDelete(u.id)}
                                                 className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -310,13 +322,6 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 </td>
                             </tr>
                         ))}
-                        {users.length === 0 && (
-                            <tr>
-                                <td colSpan={4} className="p-8 text-center text-slate-400">
-                                    No se encontraron usuarios registrados.
-                                </td>
-                            </tr>
-                        )}
                     </tbody>
                 </table>
             </div>
@@ -355,7 +360,7 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Electrónico</label>
                             <input 
                                 type="email" required
-                                disabled={!!editingUser} // Email no editable
+                                disabled={!!editingUser} 
                                 value={formData.email}
                                 onChange={e => setFormData({...formData, email: e.target.value})}
                                 className={`w-full border-slate-300 rounded-lg shadow-sm focus:ring-slate-900 focus:border-slate-900 ${editingUser ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
@@ -364,16 +369,56 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         </div>
                         
                         {!editingUser && (
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contraseña Inicial</label>
-                                <input 
-                                    type="password" required
-                                    value={formData.password}
-                                    onChange={e => setFormData({...formData, password: e.target.value})}
-                                    className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-slate-900 focus:border-slate-900"
-                                    placeholder="Mínimo 6 caracteres"
-                                />
-                            </div>
+                            <>
+                                {/* CAMPO: CONTRASEÑA */}
+                                <div className="relative">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contraseña Inicial</label>
+                                    <div className="relative">
+                                        <input 
+                                            type={showPassword ? 'text' : 'password'} 
+                                            required
+                                            value={formData.password}
+                                            onChange={e => setFormData({...formData, password: e.target.value})}
+                                            className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-slate-900 focus:border-slate-900 pr-10"
+                                            placeholder="Mínimo 6 caracteres"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                                        >
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* CAMPO: CONFIRMAR CONTRASEÑA */}
+                                <div className="relative">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Confirmar Contraseña</label>
+                                    <div className="relative">
+                                        <input 
+                                            type={showConfirmPassword ? 'text' : 'password'} 
+                                            required
+                                            value={formData.confirmPassword}
+                                            onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
+                                            className={`w-full border-slate-300 rounded-lg shadow-sm focus:ring-slate-900 focus:border-slate-900 pr-10 ${
+                                                formData.confirmPassword && formData.password !== formData.confirmPassword ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''
+                                            }`}
+                                            placeholder="Repite la contraseña"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                                        >
+                                            {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                    {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                                        <p className="text-xs text-red-500 mt-1 font-bold">Las contraseñas no coinciden</p>
+                                    )}
+                                </div>
+                            </>
                         )}
                     </div>
 
@@ -423,8 +468,8 @@ const UserManagement: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         </button>
                         <button 
                             type="submit"
-                            disabled={isSubmitting}
-                            className="flex-1 py-3 bg-castor-red text-white font-bold rounded-lg shadow hover:bg-red-800 disabled:opacity-70 disabled:cursor-wait transition-colors flex justify-center items-center gap-2"
+                            disabled={isSubmitting || (!editingUser && formData.password !== formData.confirmPassword)}
+                            className="flex-1 py-3 bg-castor-red text-white font-bold rounded-lg shadow hover:bg-red-800 disabled:opacity-70 disabled:cursor-not-allowed transition-colors flex justify-center items-center gap-2"
                         >
                             {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
                             {editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
