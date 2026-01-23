@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { Scenario, ScenarioStatus, DateRange } from '../types';
-import { Calendar, AlertCircle, Plus, Trash2, Tag, DollarSign } from 'lucide-react';
+import { Scenario, ScenarioStatus, DateRange, ScenarioType } from '../types';
+import { Calendar, AlertCircle, Plus, Trash2, Tag } from 'lucide-react';
 import { validateScenarioDates } from '../utils';
 import { getItemsByCategory } from '../constants';
 
@@ -52,7 +52,7 @@ const DateRangeSection = ({
               <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wide">Inicio ({idx + 1})</label>
               <input
                 type="date"
-                className={`block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs py-1.5 ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`}
+                className={`block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs py-1.5 ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                 value={range.start}
                 disabled={isReadOnly}
                 onChange={(e) => onUpdate(range.id, 'start', e.target.value)}
@@ -62,7 +62,7 @@ const DateRangeSection = ({
               <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wide">Fin ({idx + 1})</label>
               <input
                 type="date"
-                className={`block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs py-1.5 ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`}
+                className={`block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs py-1.5 ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                 value={range.end}
                 disabled={isReadOnly}
                 onChange={(e) => onUpdate(range.id, 'end', e.target.value)}
@@ -90,7 +90,12 @@ const DateRangeSection = ({
 };
 
 const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
-  const isReadOnly = scenario.status === ScenarioStatus.CLOSED;
+  // -------------------------------------------------------------------------
+  // 1. DEFINICIÓN DE SOLO LECTURA
+  // Si el estado es CLOSED o el tipo es FINAL, se bloquea la edición.
+  // -------------------------------------------------------------------------
+  const isReadOnly = scenario.status === ScenarioStatus.CLOSED || scenario.type === ScenarioType.FINAL;
+  
   const category = scenario.category || 'LIFT';
   const isRental = category !== 'LIFT';
   
@@ -107,10 +112,16 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
     onUpdateParams({ [field]: finalValue });
   };
 
-  // Handler específico para precios de rental
+  // -------------------------------------------------------------------------
+  // 2. CORRECCIÓN DEL HANDLER (Fix TS2872)
+  // Eliminamos el "|| {}" redundante.
+  // -------------------------------------------------------------------------
   const handleRentalPriceChange = (itemId: string, value: string) => {
     if (isReadOnly) return;
+    
+    // Spread siempre crea un objeto, no es necesario "|| {}"
     const currentPrices = { ...scenario.params.rentalBasePrices };
+    
     currentPrices[itemId] = parseFloat(value) || 0;
     onUpdateParams({ rentalBasePrices: currentPrices });
   };
@@ -142,6 +153,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
     <div className="p-6 bg-white shadow-sm rounded-lg max-w-5xl mx-auto mt-6 mb-12">
       <h2 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2 flex items-center gap-2">
          Configuración de Parámetros <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-500 font-normal uppercase">{category.replace('_', ' ')}</span>
+         {isReadOnly && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Solo Lectura</span>}
       </h2>
 
       {dateError && (
@@ -161,7 +173,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
             
             {/* CASO 1: PASES (LIFT) */}
             {!isRental && (
-                <div className="bg-blue-50 p-5 rounded-lg border border-blue-100 shadow-sm">
+                <div className={`bg-blue-50 p-5 rounded-lg border border-blue-100 shadow-sm ${isReadOnly ? 'opacity-90' : ''}`}>
                     <div className="flex items-center gap-2 mb-3">
                         <Tag className="text-blue-600" size={18} />
                         <h3 className="font-bold text-blue-900">Tarifa Base (Pase Diario)</h3>
@@ -177,7 +189,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                             value={scenario.params.baseRateAdult1Day}
                             onChange={(e) => handleChange('baseRateAdult1Day', e.target.value)}
                             onFocus={(e) => e.target.select()}
-                            className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-7 pr-12 text-lg font-bold border-gray-300 rounded-md"
+                            className={`block w-full pl-7 pr-12 text-lg font-bold border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white'}`}
                         />
                     </div>
                 </div>
@@ -192,6 +204,10 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                     </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* --------------------------------------------------------------- */}
+                        {/* PARTE 2: ACTUALIZACIÓN DEL MAP EN JSX                           */}
+                        {/* Aquí se generan los inputs y se bloquean si isReadOnly es true  */}
+                        {/* --------------------------------------------------------------- */}
                         {rentalItems.map(item => (
                             <div key={item.id} className="bg-white p-3 rounded border border-gray-200 hover:border-blue-300 transition-colors">
                                 <label className="block text-xs font-bold text-gray-600 mb-1 truncate" title={item.label}>
@@ -203,11 +219,17 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                                     </div>
                                     <input
                                         type="number"
+                                        
+                                        // AQUI ESTÁ EL CANDADO VISUAL
                                         disabled={isReadOnly}
+                                        
                                         value={scenario.params.rentalBasePrices?.[item.id] || 0}
                                         onChange={(e) => handleRentalPriceChange(item.id, e.target.value)}
                                         onFocus={(e) => e.target.select()}
-                                        className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-6 pr-2 py-1 text-sm font-semibold border-gray-300 rounded"
+                                        
+                                        // ESTILOS CONDICIONALES
+                                        className={`block w-full pl-6 pr-2 py-1 text-sm font-semibold border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
+                                        
                                         placeholder="0.00"
                                     />
                                     <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
@@ -227,7 +249,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
         {/* COLUMNA 2: AJUSTES GLOBALES */}
         <div className="space-y-4">
             
-            <div className="bg-orange-50 p-4 rounded-md border border-orange-100">
+            <div className={`bg-orange-50 p-4 rounded-md border border-orange-100 ${isReadOnly ? 'opacity-80' : ''}`}>
                 <label className="block text-sm font-bold text-orange-900 mb-1">% Aumento Proyectado</label>
                 <p className="text-xs text-orange-700 mb-2">Aplica sobre todos los precios base.</p>
                 <div className="relative rounded-md shadow-sm">
@@ -238,7 +260,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                         value={scenario.params.increasePercentage}
                         onChange={(e) => handleChange('increasePercentage', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        className="focus:ring-orange-500 focus:border-orange-500 block w-full pr-12 text-lg font-bold border-gray-300 rounded-md"
+                        className={`block w-full pr-12 text-lg font-bold border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white'}`}
                     />
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                         <span className="text-gray-500 sm:text-sm">%</span>
@@ -246,7 +268,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                 </div>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+            <div className={`bg-gray-50 p-4 rounded-md border border-gray-200 ${isReadOnly ? 'opacity-80' : ''}`}>
                 <label className="block text-sm font-bold text-gray-700 mb-1">Múltiplo de Redondeo</label>
                 <p className="text-xs text-gray-500 mb-2">Ajuste final del precio visual.</p>
                 <div className="relative rounded-md shadow-sm">
@@ -259,15 +281,15 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                         value={scenario.params.roundingValue}
                         onChange={(e) => handleChange('roundingValue', e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        className="focus:ring-gray-500 focus:border-gray-500 block w-full pl-7 text-lg border-gray-300 rounded-md"
+                        className={`block w-full pl-7 text-lg border-gray-300 rounded-md focus:ring-gray-500 focus:border-gray-500 ${isReadOnly ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white'}`}
                     />
                 </div>
             </div>
 
-            {/* Descuentos de Promo/Menor (Solo relevantes para LIFT, pero los dejamos visibles por si acaso se usan en rental futuro) */}
+            {/* Descuentos de Promo/Menor */}
             {!isRental && (
                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-green-50 p-3 rounded border border-green-100">
+                    <div className={`bg-green-50 p-3 rounded border border-green-100 ${isReadOnly ? 'opacity-80' : ''}`}>
                         <label className="block text-xs font-bold text-green-900 mb-1">% Dto. Promo</label>
                         <input
                             type="number"
@@ -276,10 +298,10 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                             value={scenario.params.promoDiscountPercentage}
                             onChange={(e) => handleChange('promoDiscountPercentage', e.target.value)}
                             onFocus={(e) => e.target.select()}
-                            className="block w-full border-gray-300 rounded-md shadow-sm text-sm"
+                            className={`block w-full border-gray-300 rounded-md shadow-sm text-sm ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                         />
                     </div>
-                    <div className="bg-purple-50 p-3 rounded border border-purple-100">
+                    <div className={`bg-purple-50 p-3 rounded border border-purple-100 ${isReadOnly ? 'opacity-80' : ''}`}>
                         <label className="block text-xs font-bold text-purple-900 mb-1">% Dto. Menor</label>
                         <input
                             type="number"
@@ -288,7 +310,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                             value={scenario.params.minorDiscountPercentage}
                             onChange={(e) => handleChange('minorDiscountPercentage', e.target.value)}
                             onFocus={(e) => e.target.select()}
-                            className="block w-full border-gray-300 rounded-md shadow-sm text-sm"
+                            className={`block w-full border-gray-300 rounded-md shadow-sm text-sm ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                         />
                     </div>
                 </div>
@@ -312,7 +334,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                   disabled={isReadOnly}
                   value={scenario.params.validFrom}
                   onChange={(e) => handleChange('validFrom', e.target.value)}
-                  className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className={`block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
               <div className="flex-1">
@@ -322,7 +344,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                   disabled={isReadOnly}
                   value={scenario.params.validTo}
                   onChange={(e) => handleChange('validTo', e.target.value)}
-                  className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className={`block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
                 />
               </div>
             </div>
