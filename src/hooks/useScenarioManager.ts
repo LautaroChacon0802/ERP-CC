@@ -7,7 +7,8 @@ import {
   INITIAL_PARAMS, 
   getItemsByCategory
 } from '../constants';
-import { calculateScenarioPrices } from '../utils';
+// FIX: Agregamos validateScenarioDates al import
+import { calculateScenarioPrices, validateScenarioDates } from '../utils';
 import { useToast } from '../contexts/ToastContext';
 import { useScenarioData } from './useScenarioData';
 import { TabInfo } from '../components/SheetTabs';
@@ -43,11 +44,9 @@ export const useScenarioManager = () => {
         if (seedId) {
             setActiveScenarioId(seedId);
         } else {
-            // Restore selection
             const initial = scenarios.find(s => (s.category || 'LIFT') === selectedCategory);
             if (initial) setActiveScenarioId(initial.id);
             else if (scenarios.length > 0) setActiveScenarioId(scenarios[0].id);
-            
             notify("Sistema sincronizado correctamente", "success");
         }
       })
@@ -75,7 +74,7 @@ export const useScenarioManager = () => {
     }
   }, [selectedCategory, scenarios]); 
 
-  // PERFORMANCE: Deferred Calculation
+  // --- OPTIMIZATION CORE (MEMOIZATION) ---
   const deferredParams = useDeferredValue(activeScenarioRaw?.params);
   const deferredCoefficients = useDeferredValue(activeScenarioRaw?.coefficients);
   const deferredCategory = useDeferredValue(activeScenarioRaw?.category);
@@ -90,7 +89,6 @@ export const useScenarioManager = () => {
     );
   }, [deferredParams, deferredCoefficients, deferredCategory]);
 
-  // Reconstruct full object for UI
   const activeScenario = useMemo(() => {
     if (!activeScenarioRaw) return undefined;
     return {
@@ -110,7 +108,6 @@ export const useScenarioManager = () => {
       return;
     }
 
-    // Determine Base Params
     const baseScenario = activeScenario && (activeScenario.category || 'LIFT') === selectedCategory 
         ? activeScenario 
         : null;
@@ -139,7 +136,6 @@ export const useScenarioManager = () => {
 
     const baseCoefs = baseScenario ? baseScenario.coefficients : defaultCoefficients;
 
-    // Call Data Layer
     const newId = createLocalDraft(selectedCategory, newParams, baseCoefs, baseScenario?.id || null);
     
     setActiveScenarioId(newId);
@@ -198,16 +194,21 @@ export const useScenarioManager = () => {
         return;
     }
 
+    // FIX: Validación de fechas efectiva
+    const dateError = validateScenarioDates(activeScenario.params);
+    if (dateError) {
+        notify(`Error de Fechas: ${dateError}`, "error");
+        return;
+    }
+
     if (!window.confirm(`¿Cerrar y Publicar "${activeScenario.name}"?\n\nEsta acción es irreversible.`)) return;
 
-    // Prepare fully calculated scenario for DB
     const scenarioToSave = {
         ...activeScenario,
         status: ScenarioStatus.CLOSED,
         closedAt: new Date().toISOString()
     };
 
-    // Call Data Layer
     const success = await syncScenarioToDb(scenarioToSave);
 
     if (success) {

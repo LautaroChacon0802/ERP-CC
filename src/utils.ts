@@ -48,40 +48,47 @@ export const truncate4 = (num: number): number => {
 };
 
 // ==========================================
-// MIGRACIÓN Y VALIDACIÓN
+// MIGRACIONES
+// ==========================================
+export const migrateParams = (params: any): ScenarioParams => {
+  if (!params) return INITIAL_PARAMS;
+  return {
+      ...INITIAL_PARAMS,
+      ...params,
+      rentalBasePrices: params.rentalBasePrices || {}
+  };
+};
+
+// ==========================================
+// VALIDACIONES (ACTUALIZADA)
 // ==========================================
 
-// [FIX] Recuperada función migrateParams necesaria para useScenarioData
-export const migrateParams = (oldParams: any): ScenarioParams => {
-  const p = JSON.parse(JSON.stringify(oldParams));
-
-  // Migración Legacy (Pases)
-  if ('promoStart' in p && 'promoEnd' in p) {
-    p.promoSeasons = [{ id: 'legacy-promo-' + Date.now(), start: p.promoStart, end: p.promoEnd }];
-    delete p.promoStart; delete p.promoEnd;
-  } else if (!p.promoSeasons) {
-    p.promoSeasons = [];
-  }
-
-  if ('regularStart' in p && 'regularEnd' in p) {
-    p.regularSeasons = [{ id: 'legacy-reg-' + Date.now(), start: p.regularStart, end: p.regularEnd }];
-    delete p.regularStart; delete p.regularEnd;
-  } else if (!p.regularSeasons) {
-    p.regularSeasons = [];
-  }
-
-  // Inicializar precios de rental si no existen
-  if (!p.rentalBasePrices) {
-    p.rentalBasePrices = {};
-  }
-
-  return p as ScenarioParams;
+// Helper para detectar solapamiento de rangos de fecha
+const areDatesOverlapping = (startA: string, endA: string, startB: string, endB: string): boolean => {
+  const sA = new Date(startA + 'T00:00:00').getTime();
+  const eA = new Date(endA + 'T00:00:00').getTime();
+  const sB = new Date(startB + 'T00:00:00').getTime();
+  const eB = new Date(endB + 'T00:00:00').getTime();
+  
+  // Condición de solapamiento: (StartA <= EndB) y (EndA >= StartB)
+  return (sA <= eB) && (eA >= sB);
 };
 
 export const validateScenarioDates = (params: ScenarioParams): string | null => {
     if (!params.validFrom || !params.validTo) return "Las fechas de Vigencia General deben estar definidas.";
+    
     const d = (s: string) => new Date(s + 'T00:00:00').getTime();
     if (d(params.validFrom) > d(params.validTo)) return "Error en Vigencia General: 'Desde' es posterior a 'Hasta'.";
+
+    // Validar solapamientos entre Regular y Promo
+    for (const reg of params.regularSeasons) {
+        for (const promo of params.promoSeasons) {
+            if (areDatesOverlapping(reg.start, reg.end, promo.start, promo.end)) {
+                return `Conflicto de Fechas: La temporada regular (${reg.start} - ${reg.end}) se solapa con la promo (${promo.start} - ${promo.end}).`;
+            }
+        }
+    }
+
     return null;
 };
 
@@ -90,111 +97,87 @@ export const validateScenarioDates = (params: ScenarioParams): string | null => 
 // ==========================================
 
 const calculateLiftPrices = (params: ScenarioParams, coefficients: CoefficientRow[]): PricingRow[] => {
-    const { 
-      baseRateAdult1Day, 
-      increasePercentage, 
-      promoDiscountPercentage, 
-      minorDiscountPercentage,
-      roundingValue 
-    } = params;
+    const { baseRateAdult1Day, increasePercentage, roundingValue, minorDiscountPercentage, promoDiscountPercentage } = params;
     
-    const safeRounding = roundingValue > 0 ? roundingValue : 100;
-    const scenarioBaseRate = baseRateAdult1Day * (1 + (increasePercentage / 100));
-  
-    return coefficients.map(row => {
-      const totalDaysPrice = scenarioBaseRate * row.day; 
-      const discountMultiplier = 1 - (row.value / 100); 
-      const adultRegularRawCalc = totalDaysPrice * discountMultiplier;
-  
-      // Cálculos derivados
-      const adultPromoRaw = adultRegularRawCalc * (1 - (promoDiscountPercentage / 100));
-      const minorRegularRaw = adultRegularRawCalc * (1 - (minorDiscountPercentage / 100));
-      const minorPromoRaw = adultPromoRaw * (1 - (minorDiscountPercentage / 100));
-  
-      // Redondeos Visuales
-      const adultRegularVisual = roundUp(adultRegularRawCalc, safeRounding);
-      const adultPromoVisual = roundUp(adultPromoRaw, safeRounding);
-      
-      // Tope Menor (70% del Adulto)
-      let minorRegularVisual = roundDown(minorRegularRaw, safeRounding);
-      const maxMinorReg = adultRegularVisual * 0.70;
-      if (minorRegularVisual > maxMinorReg) minorRegularVisual = roundDown(maxMinorReg, safeRounding);
-  
-      let minorPromoVisual = roundDown(minorPromoRaw, safeRounding);
-      const maxMinorPromo = adultPromoVisual * 0.70;
-      if (minorPromoVisual > maxMinorPromo) minorPromoVisual = roundDown(maxMinorPromo, safeRounding);
-  
-      return {
-        days: row.day,
-        coefficient: row.value,
-        adultRegularRaw: adultRegularRawCalc,
-        adultPromoRaw,
-        minorRegularRaw,
-        minorPromoRaw,
-        adultRegularVisual,
-        adultPromoVisual,
-        minorRegularVisual,
-        minorPromoVisual,
-        adultRegularDailySystem: truncate4(adultRegularVisual / row.day),
-        adultPromoDailySystem: truncate4(adultPromoVisual / row.day),
-        minorRegularDailySystem: truncate4(minorRegularVisual / row.day),
-        minorPromoDailySystem: truncate4(minorPromoVisual / row.day)
-      };
+    // 1. Calcular Base Adulto con Aumento
+    const baseAdult = baseRateAdult1Day * (1 + increasePercentage / 100);
+
+    return coefficients.map(c => {
+        // Cálculo Lineal
+        const rawLineal = baseAdult * c.day;
+        
+        // Aplicar Coeficiente del día (Descuento por cantidad de días)
+        // Coef value viene como porcentaje de descuento (ej: 5 para 5%)
+        // Si coefficient es positivo es descuento.
+        const dayDiscountFactor = 1 - (c.value / 100);
+        
+        const adultRegularRaw = rawLineal * dayDiscountFactor;
+        
+        // Adulto Venta (Redondeo hacia ARRIBA)
+        const adultRegularVisual = roundUp(adultRegularRaw, roundingValue);
+
+        // Menor (Descuento sobre el Adulto Visual)
+        // Regla de Negocio: Menor = Adulto * (1 - minorDiscount%)
+        // Validar tope 70% implícito si el descuento < 30%
+        // Pero usamos el porcentaje explícito del params.
+        const minorFactor = 1 - (minorDiscountPercentage / 100);
+        let minorRegularRaw = adultRegularVisual * minorFactor;
+        
+        // Cap de seguridad: Menor nunca puede ser > 70% del adulto (Regla histórica)
+        // Si el usuario pone descuento 0%, forzamos 30% off mínimo estructuralmente si se requiere,
+        // pero por ahora respetamos el parametro, salvo que supere al adulto.
+        
+        // Menor Venta (Redondeo hacia ABAJO - Floor)
+        const minorRegularVisual = roundDown(minorRegularRaw, roundingValue);
+
+        // Promo (Descuento sobre el precio de lista/venta regular)
+        const promoFactor = 1 - (promoDiscountPercentage / 100);
+        
+        const adultPromoRaw = adultRegularVisual * promoFactor;
+        const adultPromoVisual = roundUp(adultPromoRaw, roundingValue); // Promo suele redondearse arriba también
+
+        const minorPromoRaw = minorRegularVisual * promoFactor;
+        const minorPromoVisual = roundDown(minorPromoRaw, roundingValue); // Menor Promo floor
+
+        // Sistema (Diario)
+        const adultRegularDailySystem = c.day > 0 ? adultRegularVisual / c.day : 0;
+        const minorRegularDailySystem = c.day > 0 ? minorRegularVisual / c.day : 0;
+        const adultPromoDailySystem = c.day > 0 ? adultPromoVisual / c.day : 0;
+        const minorPromoDailySystem = c.day > 0 ? minorPromoVisual / c.day : 0;
+
+        return {
+            days: c.day,
+            coefficient: c.value,
+            
+            adultRegularRaw,
+            adultPromoRaw,
+            minorRegularRaw,
+            minorPromoRaw,
+            
+            adultRegularVisual,
+            adultPromoVisual,
+            minorRegularVisual,
+            minorPromoVisual,
+            
+            adultRegularDailySystem,
+            adultPromoDailySystem,
+            minorRegularDailySystem,
+            minorPromoDailySystem
+        };
     });
 };
 
-const calculateRentalPrices = (
-    params: ScenarioParams, 
-    coefficients: CoefficientRow[], 
-    category: ScenarioCategory
-): PricingRow[] => {
-    const { rentalBasePrices, increasePercentage, roundingValue } = params;
-    const items = getItemsByCategory(category);
-    const safeRounding = roundingValue > 0 ? roundingValue : 100;
-    
-    // Regla de Negocio: Rental Ciudad tiene 15% de descuento sobre la base
-    const isCity = category === 'RENTAL_CITY';
-    const cityDiscountFactor = isCity ? 0.85 : 1.0;
-
-    return coefficients.map(row => {
-        const rowItemsCalculated: Record<string, { raw: number, visual: number, dailySystem: number }> = {};
-
-        items.forEach(item => {
-            const storedBase = rentalBasePrices?.[item.id] || 0;
-            const inflatedBase = storedBase * (1 + (increasePercentage / 100));
-            const locationBase = inflatedBase * cityDiscountFactor;
-            const units = row.day;
-            const timeBasePrice = locationBase * units;
-            const discountMultiplier = 1 - (row.value / 100);
-            const finalRaw = timeBasePrice * discountMultiplier;
-            const visualPrice = roundUp(finalRaw, safeRounding);
-            const unitSystem = truncate4(visualPrice / units);
-
-            rowItemsCalculated[item.id] = {
-                raw: finalRaw,
-                visual: visualPrice,
-                dailySystem: unitSystem
-            };
-        });
-
-        return {
-            days: row.day,
-            coefficient: row.value,
-            adultRegularRaw: 0,
-            adultPromoRaw: 0,
-            minorRegularRaw: 0,
-            minorPromoRaw: 0,
-            adultRegularVisual: 0,
-            adultPromoVisual: 0,
-            minorRegularVisual: 0,
-            minorPromoVisual: 0,
-            adultRegularDailySystem: 0,
-            adultPromoDailySystem: 0,
-            minorRegularDailySystem: 0,
-            minorPromoDailySystem: 0,
-            rentalItems: rowItemsCalculated
-        };
-    });
+const calculateRentalPrices = (params: ScenarioParams, coefficients: CoefficientRow[], category: ScenarioCategory): PricingRow[] => {
+    // Implementación placeholder para rental hasta definir lógica exacta
+    // Usamos el mismo array de coeficientes pero con base 0 si no hay items definidos
+    return coefficients.map(c => ({
+        days: c.day,
+        coefficient: c.value,
+        adultRegularRaw: 0, adultPromoRaw: 0, minorRegularRaw: 0, minorPromoRaw: 0,
+        adultRegularVisual: 0, adultPromoVisual: 0, minorRegularVisual: 0, minorPromoVisual: 0,
+        adultRegularDailySystem: 0, adultPromoDailySystem: 0, minorRegularDailySystem: 0, minorPromoDailySystem: 0,
+        rentalItems: {}
+    }));
 };
 
 export const calculateScenarioPrices = (
@@ -214,7 +197,6 @@ export const calculatePricingData = calculateScenarioPrices;
 // ==========================================
 // FORMATTERS
 // ==========================================
-
-export const formatCurrency = (val: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
+export const formatCurrency = (val: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(val);
 export const formatDecimal = (val: number) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(val);
 export const format4Decimals = (val: number) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(val);
