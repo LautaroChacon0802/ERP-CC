@@ -28,10 +28,6 @@ export const useScenarioData = () => {
 
   // --- API ACTIONS ---
 
-  /**
-   * Carga datos iniciales. Lanza error si falla.
-   * Retorna el ID del escenario que debería activarse (si es un seed nuevo) o null.
-   */
   const loadInitialData = useCallback(async (): Promise<string | null> => {
     try {
       setLoadingMessage('Sincronizando configuración y datos...');
@@ -40,12 +36,26 @@ export const useScenarioData = () => {
           BackendService.getDefaultCoefficients()
       ]);
 
+      // Aplicamos migraciones a los params por si la estructura cambió
       const migratedHistory = remoteHistory.map(entry => ({
           ...entry,
           params: migrateParams(entry.params)
       }));
 
-      setHistory(migratedHistory);
+      // Convertimos a formato historial para el componente HistorySheet
+      const logEntries: HistoryLogEntry[] = migratedHistory.map(h => ({
+        scenarioId: h.id,
+        name: h.name,
+        season: h.season,
+        scenarioType: h.type,
+        status: h.status,
+        closedAt: h.closedAt || new Date().toISOString(),
+        category: h.category || 'LIFT',
+        data: h.calculatedData,
+        params: h.params
+      }));
+
+      setHistory(logEntries);
       setDefaultCoefficients(configCoefs);
 
       // Seed Logic: Si no hay historia, creamos un seed en memoria
@@ -68,27 +78,33 @@ export const useScenarioData = () => {
           setScenarios([seedScenario]);
           return seedScenario.id; 
       } else {
-          // Cargamos escenarios "ligeros" (sin calculatedData) para listar
+          // FIX APLICADO:
+          // 1. Usamos h.id en vez de h.scenarioId (h es un Scenario)
+          // 2. Usamos h.type en vez de h.scenarioType
+          // 3. Usamos h.coefficients y h.calculatedData del backend en vez de defaults vacíos.
           const loadedScenarios: Scenario[] = migratedHistory.map(h => ({
-              id: h.scenarioId,
+              id: h.id, 
               name: h.name || 'Escenario Recuperado',
               season: h.season,
-              type: h.scenarioType as ScenarioType,
-              category: (h as any).category || 'LIFT', 
-              baseScenarioId: null,
+              type: h.type as ScenarioType,
+              category: h.category || 'LIFT', 
+              baseScenarioId: h.baseScenarioId || null,
               status: h.status,
-              createdAt: h.closedAt || new Date().toISOString(),
+              createdAt: h.createdAt || new Date().toISOString(),
               closedAt: h.closedAt,
               params: h.params,
-              coefficients: configCoefs,
-              calculatedData: []
+              // Priorizamos lo que viene de la DB, fallback a config por defecto si es null
+              coefficients: (h.coefficients && h.coefficients.length > 0) ? h.coefficients : configCoefs,
+              // Importante: Cargamos la data calculada para poder ver tarifarios antiguos sin recalcular
+              calculatedData: h.calculatedData || []
           }));
+          
           setScenarios(loadedScenarios);
           return null; 
       }
     } catch (error) {
       console.error("Error en data layer:", error);
-      throw error; // Re-lanzar para que el Manager notifique
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -102,7 +118,7 @@ export const useScenarioData = () => {
   ): string => {
     const newId = generateId();
     
-    // Deep copy de params para evitar referencias
+    // Deep copy de params
     const newParams: ScenarioParams = {
         ...baseParams,
         promoSeasons: baseParams.promoSeasons.map(s => ({...s, id: `promo-${generateId()}`})),
@@ -152,10 +168,6 @@ export const useScenarioData = () => {
     setScenarios(prev => prev.filter(s => s.id !== id));
   }, []);
 
-  /**
-   * Guarda en DB y actualiza historial local.
-   * Retorna true si éxito, false si fallo.
-   */
   const syncScenarioToDb = useCallback(async (scenario: Scenario): Promise<boolean> => {
     try {
         setLoadingMessage('Guardando en base de datos...');
