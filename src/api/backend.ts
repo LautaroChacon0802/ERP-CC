@@ -16,7 +16,7 @@ const safeJsonParse = (val: any, fallback: any) => {
 
 export const fetchScenarios = async (): Promise<Scenario[]> => {
   const { data, error } = await supabase
-    .from('scenarios')
+    .from('pricing_scenarios') // FIX: Tabla correcta
     .select('*')
     .order('created_at', { ascending: false });
 
@@ -39,7 +39,7 @@ export const fetchScenarios = async (): Promise<Scenario[]> => {
 };
 
 export const createScenario = async (scenario: Scenario) => {
-  const { error } = await supabase.from('scenarios').insert({
+  const { error } = await supabase.from('pricing_scenarios').insert({ // FIX: Tabla correcta
     id: scenario.id,
     name: scenario.name,
     season: scenario.season,
@@ -60,7 +60,7 @@ export const createScenario = async (scenario: Scenario) => {
 
 export const updateScenario = async (scenario: Scenario) => {
   const { error } = await supabase
-    .from('scenarios')
+    .from('pricing_scenarios') // FIX: Tabla correcta
     .update({
       name: scenario.name,
       season: scenario.season,
@@ -79,7 +79,7 @@ export const updateScenario = async (scenario: Scenario) => {
 
 export const updateScenarioParams = async (id: string, params: ScenarioParams) => {
   const { error } = await supabase
-    .from('scenarios')
+    .from('pricing_scenarios') // FIX: Tabla correcta
     .update({ params })
     .eq('id', id);
 
@@ -88,7 +88,7 @@ export const updateScenarioParams = async (id: string, params: ScenarioParams) =
 };
 
 export const deleteScenario = async (id: string) => {
-  const { error } = await supabase.from('scenarios').delete().eq('id', id);
+  const { error } = await supabase.from('pricing_scenarios').delete().eq('id', id); // FIX: Tabla correcta
   if (error) throw error;
   return true;
 };
@@ -96,15 +96,15 @@ export const deleteScenario = async (id: string) => {
 // --- SERVICE OBJECT ---
 export const BackendService = {
   getHistory: fetchScenarios,
-  // FIX: Días restringidos (1-10, 15, 30)
   getDefaultCoefficients: async () => {
+      // FIX: Días explícitos requeridos [1..10, 15, 30]
       const ALLOWED_DAYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
       return ALLOWED_DAYS.map(d => ({ day: d, value: 0 }));
   },
   
   saveScenario: async (scenario: Scenario) => {
     try {
-      const { data } = await supabase.from('scenarios').select('id').eq('id', scenario.id).maybeSingle();
+      const { data } = await supabase.from('pricing_scenarios').select('id').eq('id', scenario.id).maybeSingle(); // FIX: Tabla correcta
       if (data) {
         await updateScenario(scenario);
       } else {

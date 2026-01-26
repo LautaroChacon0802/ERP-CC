@@ -111,24 +111,28 @@ export const useScenarioData = () => {
         regularSeasons: baseParams.regularSeasons.map(s => ({...s, id: `reg-${generateId()}`}))
     };
 
+    // FIX: Garantizar coeficientes por defecto si baseCoefficients está vacío
+    const effectiveCoefficients = (baseCoefficients && baseCoefficients.length > 0)
+        ? baseCoefficients
+        : defaultCoefficients;
+
     const newScenario: Scenario = {
       id: newId,
       name: "",
       season: 0,
-      // FIX: Inicializar como DRAFT (Borrador) y no FINAL para permitir edición
       type: ScenarioType.DRAFT, 
       category: category, 
       baseScenarioId: baseScenarioId,
       status: ScenarioStatus.DRAFT,
       createdAt: new Date().toISOString(),
       params: newParams,
-      coefficients: baseCoefficients.map(c => ({...c})),
+      coefficients: effectiveCoefficients.map(c => ({...c})), // Deep copy seguro
       calculatedData: [] 
     };
 
     setScenarios(prev => [newScenario, ...prev]);
     return newId;
-  }, []);
+  }, [defaultCoefficients]); // Agregamos dependencia para que tome el valor actualizado
 
   const updateLocalScenarioParams = useCallback((id: string, newParams: Partial<ScenarioParams>) => {
     setScenarios(prev => prev.map(s => s.id === id 
