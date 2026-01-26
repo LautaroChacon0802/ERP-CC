@@ -10,11 +10,11 @@ interface DataSheetProps {
 }
 
 const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
-  const { exportToExcel } = useExport();
-
+  const { exportToExcel } = useExport(); // Hook integrado
   const data = scenario.calculatedData || [];
+  const hasData = data.length > 0;
 
-  // Definición de columnas según el modo de vista
+  // Renderizado condicional de columnas según el modo de vista
   const renderHeaders = () => {
     if (viewMode === 'visual') {
       return (
@@ -85,8 +85,14 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
         
         <button
           onClick={() => exportToExcel(scenario)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded shadow-sm transition-colors"
-          title="Descargar Excel"
+          disabled={!hasData}
+          className={`
+            flex items-center gap-2 px-4 py-2 text-sm font-medium rounded shadow-sm transition-colors
+            ${hasData 
+                ? 'bg-green-600 hover:bg-green-700 text-white cursor-pointer' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'}
+          `}
+          title={hasData ? "Descargar Excel" : "No hay datos para exportar"}
         >
           <Download size={16} />
           Exportar Excel
@@ -114,9 +120,10 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
           </tbody>
         </table>
         
-        {data.length === 0 && (
-            <div className="p-8 text-center text-gray-400">
-                No hay datos calculados disponibles.
+        {!hasData && (
+            <div className="p-8 text-center text-gray-400 flex flex-col items-center">
+                <p>No hay datos calculados disponibles.</p>
+                <p className="text-xs mt-2">Configure los parámetros y coeficientes para ver resultados.</p>
             </div>
         )}
       </div>

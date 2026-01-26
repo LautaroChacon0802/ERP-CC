@@ -2,10 +2,8 @@ import {
   CoefficientRow, 
   PricingRow, 
   ScenarioParams, 
-  DateRange, 
   ScenarioCategory
 } from "./types";
-import { getItemsByCategory } from "./constants";
 
 // ==========================================
 // CONSTANTES INICIALES
@@ -60,34 +58,41 @@ export const migrateParams = (params: any): ScenarioParams => {
 };
 
 // ==========================================
-// VALIDACIONES (ACTUALIZADA)
+// VALIDACIONES (MEJORADA)
 // ==========================================
 
-// Helper para detectar solapamiento de rangos de fecha
+// Helper puro para chequear intersección de fechas
 const areDatesOverlapping = (startA: string, endA: string, startB: string, endB: string): boolean => {
   const sA = new Date(startA + 'T00:00:00').getTime();
   const eA = new Date(endA + 'T00:00:00').getTime();
   const sB = new Date(startB + 'T00:00:00').getTime();
   const eB = new Date(endB + 'T00:00:00').getTime();
   
-  // Condición de solapamiento: (StartA <= EndB) y (EndA >= StartB)
+  // Lógica de solapamiento: El inicio de A es antes del fin de B Y el fin de A es después del inicio de B
   return (sA <= eB) && (eA >= sB);
 };
 
 export const validateScenarioDates = (params: ScenarioParams): string | null => {
+    // 1. Validar Vigencia General
     if (!params.validFrom || !params.validTo) return "Las fechas de Vigencia General deben estar definidas.";
     
     const d = (s: string) => new Date(s + 'T00:00:00').getTime();
     if (d(params.validFrom) > d(params.validTo)) return "Error en Vigencia General: 'Desde' es posterior a 'Hasta'.";
 
-    // Validar solapamientos entre Regular y Promo
-    for (const reg of params.regularSeasons) {
-        for (const promo of params.promoSeasons) {
-            if (areDatesOverlapping(reg.start, reg.end, promo.start, promo.end)) {
-                return `Conflicto de Fechas: La temporada regular (${reg.start} - ${reg.end}) se solapa con la promo (${promo.start} - ${promo.end}).`;
+    // 2. Validar Solapamientos entre Temporadas (Regular vs Promo)
+    // Esto previene que un día tenga dos precios contradictorios definidos por fecha
+    if (params.regularSeasons && params.promoSeasons) {
+        for (const reg of params.regularSeasons) {
+            for (const promo of params.promoSeasons) {
+                if (areDatesOverlapping(reg.start, reg.end, promo.start, promo.end)) {
+                    return `Conflicto de Fechas: La temporada regular (${reg.start} - ${reg.end}) se solapa con la promo (${promo.start} - ${promo.end}).`;
+                }
             }
         }
     }
+    
+    // 3. Validar Solapamientos internos (Regular vs Regular, Promo vs Promo) - Opcional pero recomendado
+    // ...se podría extender aquí si se desea
 
     return null;
 };
@@ -99,51 +104,25 @@ export const validateScenarioDates = (params: ScenarioParams): string | null => 
 const calculateLiftPrices = (params: ScenarioParams, coefficients: CoefficientRow[]): PricingRow[] => {
     const { baseRateAdult1Day, increasePercentage, roundingValue, minorDiscountPercentage, promoDiscountPercentage } = params;
     
-    // 1. Calcular Base Adulto con Aumento
     const baseAdult = baseRateAdult1Day * (1 + increasePercentage / 100);
 
     return coefficients.map(c => {
-        // Cálculo Lineal
         const rawLineal = baseAdult * c.day;
-        
-        // Aplicar Coeficiente del día (Descuento por cantidad de días)
-        // Coef value viene como porcentaje de descuento (ej: 5 para 5%)
-        // Si coefficient es positivo es descuento.
         const dayDiscountFactor = 1 - (c.value / 100);
-        
         const adultRegularRaw = rawLineal * dayDiscountFactor;
         
-        // Adulto Venta (Redondeo hacia ARRIBA)
         const adultRegularVisual = roundUp(adultRegularRaw, roundingValue);
 
-        // Menor (Descuento sobre el Adulto Visual)
-        // Regla de Negocio: Menor = Adulto * (1 - minorDiscount%)
-        // Validar tope 70% implícito si el descuento < 30%
-        // Pero usamos el porcentaje explícito del params.
         const minorFactor = 1 - (minorDiscountPercentage / 100);
         let minorRegularRaw = adultRegularVisual * minorFactor;
-        
-        // Cap de seguridad: Menor nunca puede ser > 70% del adulto (Regla histórica)
-        // Si el usuario pone descuento 0%, forzamos 30% off mínimo estructuralmente si se requiere,
-        // pero por ahora respetamos el parametro, salvo que supere al adulto.
-        
-        // Menor Venta (Redondeo hacia ABAJO - Floor)
         const minorRegularVisual = roundDown(minorRegularRaw, roundingValue);
 
-        // Promo (Descuento sobre el precio de lista/venta regular)
         const promoFactor = 1 - (promoDiscountPercentage / 100);
-        
         const adultPromoRaw = adultRegularVisual * promoFactor;
-        const adultPromoVisual = roundUp(adultPromoRaw, roundingValue); // Promo suele redondearse arriba también
+        const adultPromoVisual = roundUp(adultPromoRaw, roundingValue);
 
         const minorPromoRaw = minorRegularVisual * promoFactor;
-        const minorPromoVisual = roundDown(minorPromoRaw, roundingValue); // Menor Promo floor
-
-        // Sistema (Diario)
-        const adultRegularDailySystem = c.day > 0 ? adultRegularVisual / c.day : 0;
-        const minorRegularDailySystem = c.day > 0 ? minorRegularVisual / c.day : 0;
-        const adultPromoDailySystem = c.day > 0 ? adultPromoVisual / c.day : 0;
-        const minorPromoDailySystem = c.day > 0 ? minorPromoVisual / c.day : 0;
+        const minorPromoVisual = roundDown(minorPromoRaw, roundingValue);
 
         return {
             days: c.day,
@@ -159,17 +138,16 @@ const calculateLiftPrices = (params: ScenarioParams, coefficients: CoefficientRo
             minorRegularVisual,
             minorPromoVisual,
             
-            adultRegularDailySystem,
-            adultPromoDailySystem,
-            minorRegularDailySystem,
-            minorPromoDailySystem
+            adultRegularDailySystem: c.day > 0 ? adultRegularVisual / c.day : 0,
+            adultPromoDailySystem: c.day > 0 ? adultPromoVisual / c.day : 0,
+            minorRegularDailySystem: c.day > 0 ? minorRegularVisual / c.day : 0,
+            minorPromoDailySystem: c.day > 0 ? minorPromoVisual / c.day : 0
         };
     });
 };
 
 const calculateRentalPrices = (params: ScenarioParams, coefficients: CoefficientRow[], category: ScenarioCategory): PricingRow[] => {
-    // Implementación placeholder para rental hasta definir lógica exacta
-    // Usamos el mismo array de coeficientes pero con base 0 si no hay items definidos
+    // Placeholder para lógica rental
     return coefficients.map(c => ({
         days: c.day,
         coefficient: c.value,
