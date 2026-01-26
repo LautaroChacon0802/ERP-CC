@@ -1,118 +1,121 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { AuthState, User, UserRole } from '../types';
 
+// Límite de inactividad: 30 minutos
+const INACTIVITY_LIMIT = 30 * 60 * 1000;
+
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // --- HELPER ROBUSTO: fetchUserRole ---
-  // Nunca lanza error. Si falla, devuelve 'user' por defecto.
+  // Helper seguro para obtener el rol
   const fetchUserRole = async (uid: string): Promise<UserRole> => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', uid)
-        .maybeSingle(); // Usamos maybeSingle para no recibir error si no hay filas
+        .maybeSingle();
       
-      if (error) {
-        console.warn("AuthContext: Error leyendo rol, asignando 'user'", error.message);
-        return 'user';
-      }
-      
-      if (!data) {
-        console.warn("AuthContext: Perfil no encontrado, asignando 'user'");
-        return 'user';
-      }
-
-      return data.role as UserRole;
-
-    } catch (err) {
-      console.error("AuthContext: Excepción crítica leyendo rol", err);
-      return 'user'; // Fallback seguro
+      // Si hay error o no hay data, fallback a 'user'
+      if (error || !data) return 'user';
+      return (data.role as UserRole) || 'user';
+    } catch {
+      return 'user';
     }
   };
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        // 1. Obtener Sesión Actual
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) throw error;
+  const logout = useCallback(async () => {
+    try {
+        await supabase.auth.signOut();
+    } catch (error) {
+        console.error("Error logout:", error);
+    } finally {
+        localStorage.removeItem('castor_user');
+        setUser(null);
+        setIsAuthenticated(false);
+        window.location.href = '/';
+    }
+  }, []);
 
-        if (session?.user) {
-          // Intentamos obtener el rol, pero no bloqueamos si falla
-          const role = await fetchUserRole(session.user.id);
-          
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            name: session.user.user_metadata?.full_name || 'Usuario',
-            role: role 
-          });
-          setIsAuthenticated(true);
-        }
-      } catch (e) {
-        console.error("Error inicializando auth:", e);
-        // No seteamos user, queda como null (login screen)
-      } finally {
-        setLoading(false);
-      }
+  // Control de inactividad
+  useEffect(() => {
+    if (!user) return;
+    let timeoutId: NodeJS.Timeout;
+    
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        logout();
+        alert("Sesión cerrada por inactividad.");
+      }, INACTIVITY_LIMIT);
     };
 
-    initAuth();
+    const events = ['mousedown', 'keydown', 'scroll', 'click'];
+    events.forEach(e => document.addEventListener(e, resetTimer));
+    resetTimer();
 
-    // 2. Escuchar cambios en tiempo real
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(e => document.removeEventListener(e, resetTimer));
+    };
+  }, [user, logout]);
+
+  // Inicialización de Sesión
+  useEffect(() => {
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Optimización: evitar refetch si el ID no cambió
-        if (user?.id === session.user.id) return;
-
-        setLoading(true); // Breve loading mientras traemos el rol
         const role = await fetchUserRole(session.user.id);
-        
         setUser({
           id: session.user.id,
           email: session.user.email || '',
-          name: session.user.user_metadata?.full_name || 'Usuario',
+          name: session.user.user_metadata.full_name || 'Usuario',
           role: role
         });
         setIsAuthenticated(true);
-        setLoading(false);
-      } else {
+      }
+      setLoading(false);
+    };
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        // Evitar refetch si ya tenemos el usuario cargado
+        if (user?.id === session.user.id) return;
+        
+        const role = await fetchUserRole(session.user.id);
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata.full_name || 'Usuario',
+          role: role
+        });
+        setIsAuthenticated(true);
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setIsAuthenticated(false);
-        setLoading(false);
       }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Dependencias vacías para mount único
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = async (email: string, pass: string) => {
-    // Nota: setLoading(true) no es necesario aquí porque el onAuthStateChange lo manejará
+    setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password: pass,
     });
-    if (error) throw error;
-  };
-
-  const logout = async () => {
-    setLoading(true);
-    await supabase.auth.signOut();
-    setUser(null);
-    setIsAuthenticated(false);
-    setLoading(false);
-    // Forzamos limpieza local por si acaso
-    localStorage.clear();
-    window.location.href = '/';
+    if (error) {
+        setLoading(false);
+        throw error;
+    }
   };
 
   return (
@@ -124,8 +127,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

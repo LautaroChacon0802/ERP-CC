@@ -24,7 +24,7 @@ export interface DateRange {
 }
 
 // ==========================================
-// CORE INTERFACES
+// CORE INTERFACES (PRICING ENGINE - NO TOCAR)
 // ==========================================
 
 export interface CoefficientRow {
@@ -104,11 +104,15 @@ export interface HistoryLogEntry {
   params: ScenarioParams;
 }
 
+// ==========================================
+// AUTH & USER TYPES (MODIFICADO)
+// ==========================================
+
 export interface User {
-  id: string;
+  id?: string;
   email: string;
   name: string;
-  role: UserRole;
+  role: UserRole; // Reemplaza a 'permissions'
 }
 
 export interface AuthState {
@@ -118,3 +122,6 @@ export interface AuthState {
   logout: () => void;
   loading: boolean;
 }
+
+// Alias de compatibilidad
+export type UserProfile = User;

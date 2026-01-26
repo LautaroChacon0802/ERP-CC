@@ -25,8 +25,12 @@ const MainLayout: React.FC = () => {
     return <UserManagement onBack={() => setCurrentModule(null)} />;
   }
 
-  // --- DASHBOARD ---
-  const hasPerm = (perm: string) => user.permissions.includes('ADMIN') || user.permissions.includes(perm as any);
+  // --- PERMISOS POR ROL ---
+  const isAdmin = user.role === 'admin';
+  const isPricingManager = user.role === 'pricing_manager';
+  
+  const canAccessPricing = isAdmin || isPricingManager;
+  const canAccessAdmin = isAdmin;
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans">
@@ -44,7 +48,7 @@ const MainLayout: React.FC = () => {
                     <div className="flex items-center gap-4">
                         <div className="text-right hidden sm:block">
                             <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                            <p className="text-xs text-gray-500">{user.email}</p>
+                            <p className="text-xs text-gray-500 uppercase font-bold">{user.role.replace('_', ' ')}</p>
                         </div>
                         <button 
                             onClick={logout}
@@ -66,13 +70,12 @@ const MainLayout: React.FC = () => {
                 
                 {/* PRICING CARD */}
                 <div 
-                    onClick={() => hasPerm('PRICING_ACCESS') && setCurrentModule('PRICING')}
-                    className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col items-center text-center transition-all ${hasPerm('PRICING_ACCESS') ? 'hover:shadow-md hover:border-blue-300 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
+                    onClick={() => canAccessPricing && setCurrentModule('PRICING')}
+                    className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col items-center text-center transition-all ${canAccessPricing ? 'hover:shadow-md hover:border-blue-300 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
                 >
                     <div className="bg-blue-100 p-4 rounded-full mb-4">
                         <DollarSign className="h-8 w-8 text-blue-600" />
                     </div>
-                    {/* CAMBIO 1: RENOMBRADO A TARIFARIOS */}
                     <h3 className="text-lg font-bold text-gray-900">Tarifarios</h3>
                     <p className="text-sm text-gray-500 mt-2">Gestión de escenarios, coeficientes y generación de matrices.</p>
                 </div>
@@ -83,7 +86,6 @@ const MainLayout: React.FC = () => {
                     <div className="bg-orange-100 p-4 rounded-full mb-4">
                         <Utensils className="h-8 w-8 text-orange-600" />
                     </div>
-                    {/* CAMBIO 2: RENOMBRADO A PRESUPUESTOS */}
                     <h3 className="text-lg font-bold text-gray-900">Presupuestos</h3>
                     <p className="text-sm text-gray-500 mt-2">Control de menús, costos y puntos de venta.</p>
                 </div>
@@ -94,13 +96,12 @@ const MainLayout: React.FC = () => {
                     <div className="bg-green-100 p-4 rounded-full mb-4">
                         <Box className="h-8 w-8 text-green-600" />
                     </div>
-                    {/* CAMBIO 3: RENOMBRADO A STOCK */}
                     <h3 className="text-lg font-bold text-gray-900">Stock</h3>
                     <p className="text-sm text-gray-500 mt-2">Inventario de insumos, blancos y amenities.</p>
                 </div>
 
                 {/* ADMIN CARD */}
-                {hasPerm('ADMIN') && (
+                {canAccessAdmin && (
                     <div 
                         onClick={() => setCurrentModule('ADMIN')}
                         className="bg-slate-800 rounded-xl shadow-sm border border-slate-700 p-6 flex flex-col items-center text-center cursor-pointer hover:shadow-lg hover:bg-slate-700 transition-all"
