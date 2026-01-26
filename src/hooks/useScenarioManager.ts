@@ -1,343 +1,311 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Scenario, 
-  ScenarioStatus, 
-  ScenarioType, 
-  HistoryLogEntry, 
-  CoefficientRow,
-  ScenarioCategory
-} from '../types';
-import { 
-  INITIAL_PARAMS, 
-  getItemsByCategory
-} from '../constants';
-import { calculateScenarioPrices, migrateParams } from '../utils';
-import { BackendService } from '../api/backend';
-import { Toast, ToastType } from '../components/ToastSystem';
-import { TabInfo } from '../components/SheetTabs';
+import { useState, useEffect, useCallback } from 'react';
+import { Scenario, ScenarioStatus, ScenarioType, ScenarioParams, CoefficientRow } from '../types';
+import * as api from '../api/backend';
+import { INITIAL_PARAMS, INITIAL_COEFFICIENTS, calculatePricingData } from '../utils';
+// import// ...existing code...
+export const useToast = () => {
+  // ...existing implementation...
+};
+
+// ...existing code...ast } from '../components/ToastSystem'; // Asumimos que existe o usas el interno
+
+// Mock de usuario para lógica de permisos (esto vendría de AuthContext)
+const MOCK_USER_ROLE = 'ADMIN'; 
 
 export const useScenarioManager = () => {
-  // --- STATE ---
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<ScenarioCategory>('LIFT');
+  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('LIFT');
   
-  const [activeScenarioId, setActiveScenarioId] = useState<string>('');
-  const [history, setHistory] = useState<HistoryLogEntry[]>([]);
-  const [defaultCoefficients, setDefaultCoefficients] = useState<CoefficientRow[]>([]);
-  
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [loadingMessage, setLoadingMessage] = useState<string>('Iniciando sistema...');
-  const [activeTab, setActiveTab] = useState<TabInfo>('params');
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  // Estado UI
+  const [activeTab, setActiveTab] = useState<'params' | 'coef' | 'matrix' | 'visual' | 'system' | 'compare' | 'history'>('params');
 
-  // --- NOTIFICATION SYSTEM ---
-  const notify = (message: string, type: ToastType = 'info') => {
-    const id = Date.now();
+  // Sistema de Toasts
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'success' | 'error' | 'info' }>>([]);
+
+  const addToast = (message: string, type: 'success' | 'error' | 'info') => {
+    const id = Date.now().toString();
     setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => removeToast(id), 3000);
   };
 
-  const removeToast = (id: number) => {
+  const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // --- COMPUTED: Filter Scenarios by Category ---
-  const filteredScenarios = useMemo(() => {
-    return scenarios.filter(s => (s.category || 'LIFT') === selectedCategory);
-  }, [scenarios, selectedCategory]);
-
-  const activeScenario = useMemo(() => 
-    scenarios.find(s => s.id === activeScenarioId), 
-    [scenarios, activeScenarioId]
-  );
-
-  // --- EFFECT: Auto-switch active scenario when category changes ---
+  // Carga inicial
   useEffect(() => {
-    const belongs = activeScenario && (activeScenario.category || 'LIFT') === selectedCategory;
-    
-    if (!belongs) {
-        const firstInCat = scenarios.find(s => (s.category || 'LIFT') === selectedCategory);
-        if (firstInCat) {
-            setActiveScenarioId(firstInCat.id);
-        } else {
-            setActiveScenarioId('');
-        }
+    loadScenarios();
+  }, []);
+
+  const loadScenarios = async () => {
+    setIsLoading(true);
+    setLoadingMessage('Sincronizando tarifarios...');
+    try {
+      const data = await api.fetchScenarios();
+      setScenarios(data);
+    } catch (error) {
+      console.error(error);
+      addToast('Error cargando tarifarios', 'error');
+    } finally {
+      setIsLoading(false);
     }
-  }, [selectedCategory, scenarios, activeScenario]);
+  };
 
+  // Selectores
+  const activeScenario = scenarios.find(s => s.id === activeScenarioId) || null;
+  
+  const filteredScenarios = scenarios.filter(s => {
+    const cat = s.category || 'LIFT';
+    return cat === selectedCategory;
+  });
 
-  // --- INITIALIZATION ---
-  useEffect(() => {
-    const initApp = async () => {
-      try {
-        setLoadingMessage('Sincronizando configuración y datos...');
-        const [remoteHistory, configCoefs] = await Promise.all([
-            BackendService.getHistory(),
-            BackendService.getDefaultCoefficients()
-        ]);
+  const history = filteredScenarios.filter(s => s.status === ScenarioStatus.CLOSED);
 
-        const migratedHistory = remoteHistory.map(entry => ({
-            ...entry,
-            params: migrateParams(entry.params)
-        }));
+  // ===========================================================================
+  // LÓGICA DE SEGURIDAD E INMUTABILIDAD
+  // ===========================================================================
+  
+  /**
+   * Verifica si un escenario es editable.
+   * Centraliza la regla de negocio: CLOSED o FINAL = Solo Lectura.
+   */
+  const isEditable = useCallback((scenario: Scenario | null): boolean => {
+    if (!scenario) return false;
+    // REGLA DE ORO: Si está cerrado o es final, es inmutable.
+    if (scenario.status === ScenarioStatus.CLOSED) return false;
+    if (scenario.type === ScenarioType.FINAL) return false;
+    return true;
+  }, []);
 
-        setHistory(migratedHistory);
-        setDefaultCoefficients(configCoefs);
+  // ===========================================================================
+  // OPERACIONES (CRUD)
+  // ===========================================================================
 
-        if (migratedHistory.length === 0) {
-            // Seed inicial (Solo LIFT)
-            const seedScenario: Scenario = {
-              id: 'seed-2025',
-              name: `Tarifario Base`,
-              season: 2025,
-              type: ScenarioType.FINAL,
-              category: 'LIFT',
-              baseScenarioId: null,
-              status: ScenarioStatus.CLOSED,
-              createdAt: new Date().toISOString(),
-              closedAt: new Date().toISOString(),
-              params: { ...INITIAL_PARAMS, baseRateAdult1Day: 45000 },
-              coefficients: configCoefs,
-              calculatedData: []
-            };
-            seedScenario.calculatedData = calculateScenarioPrices(seedScenario.params, seedScenario.coefficients, 'LIFT');
-            setScenarios([seedScenario]);
-            setActiveScenarioId(seedScenario.id);
-        } else {
-            const loadedScenarios: Scenario[] = migratedHistory.map(h => ({
-                id: h.scenarioId,
-                name: h.name || 'Escenario Recuperado',
-                season: h.season,
-                type: h.scenarioType as ScenarioType,
-                // --- CORRECCIÓN DE PERSISTENCIA: LEER CATEGORÍA ---
-                // Si el registro histórico no tiene categoría, asumimos 'LIFT' (compatibilidad hacia atrás)
-                category: (h as any).category || 'LIFT', 
-                baseScenarioId: null,
-                status: h.status,
-                createdAt: h.closedAt || new Date().toISOString(),
-                closedAt: h.closedAt,
-                params: h.params,
-                coefficients: configCoefs,
-                calculatedData: h.data
-            }));
-            setScenarios(loadedScenarios);
-            
-            const initialSelection = loadedScenarios.find(s => (s.category || 'LIFT') === selectedCategory);
-            if (initialSelection) setActiveScenarioId(initialSelection.id);
-            else if (loadedScenarios.length > 0) setActiveScenarioId(loadedScenarios[0].id);
+  const createScenario = async (name: string, type: ScenarioType, copyFromId?: string) => {
+    setIsLoading(true);
+    setLoadingMessage('Creando escenario...');
+    try {
+      let baseData = {
+        params: INITIAL_PARAMS,
+        coefficients: INITIAL_COEFFICIENTS,
+        season: new Date().getFullYear() + 1
+      };
 
-            notify("Histórico cargado correctamente", "success");
+      if (copyFromId) {
+        const source = scenarios.find(s => s.id === copyFromId);
+        if (source) {
+          baseData = {
+            params: source.params,
+            coefficients: source.coefficients,
+            season: source.season
+          };
         }
-
-      } catch (error) {
-        console.error("Error initializing:", error);
-        notify("Error de conexión. Se usará modo offline.", "error");
-      } finally {
-        setIsLoading(false);
       }
-    };
-    initApp();
-  }, []); 
 
-  // --- ACTIONS ---
+      const newScenario = await api.createScenario({
+        name,
+        type,
+        status: ScenarioStatus.DRAFT,
+        season: baseData.season,
+        baseScenarioId: copyFromId || null,
+        category: selectedCategory as any,
+        params: baseData.params,
+        coefficients: baseData.coefficients,
+        calculatedData: calculatePricingData(baseData.params, baseData.coefficients)
+      });
 
-  const createScenario = () => {
-    const existingDraft = filteredScenarios.find(s => s.status === ScenarioStatus.DRAFT);
-    if (existingDraft) {
-      notify(`Ya existe un borrador activo en ${selectedCategory}.`, "warning");
-      setActiveScenarioId(existingDraft.id);
+      setScenarios(prev => [newScenario, ...prev]);
+      setActiveScenarioId(newScenario.id);
+      addToast('Escenario creado correctamente', 'success');
+    } catch (e) {
+      addToast('Error al crear escenario', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateParams = async (newParams: Partial<ScenarioParams>) => {
+    if (!activeScenario) return;
+
+    // 1. CANDADO LÓGICO
+    if (!isEditable(activeScenario)) {
+      addToast('ACCIÓN DENEGADA: El tarifario está cerrado y no se puede editar.', 'error');
       return;
     }
 
-    const baseScenario = activeScenario && (activeScenario.category || 'LIFT') === selectedCategory 
-        ? activeScenario 
-        : null;
-
-    let newBaseRate = 45000;
-    if (baseScenario) {
-        const baseRow = baseScenario.calculatedData.find(r => r.days === 1);
-        newBaseRate = baseRow ? baseRow.adultRegularVisual : baseScenario.params.baseRateAdult1Day;
-    }
-
-    const newId = `sc-${Date.now()}`;
+    // Optimistic Update
+    const updatedParams = { ...activeScenario.params, ...newParams };
+    const updatedData = calculatePricingData(updatedParams, activeScenario.coefficients);
     
-    const initialRentalPrices: Record<string, number> = {};
-    if (selectedCategory !== 'LIFT') {
-        const items = getItemsByCategory(selectedCategory);
-        items.forEach(item => {
-            initialRentalPrices[item.id] = baseScenario?.params.rentalBasePrices?.[item.id] || 0;
-        });
-    }
-
-    const newParams = {
-        ...INITIAL_PARAMS,
-        baseRateAdult1Day: selectedCategory === 'LIFT' ? newBaseRate : 0, 
-        rentalBasePrices: initialRentalPrices,
-        validFrom: baseScenario?.params.validFrom || INITIAL_PARAMS.validFrom,
-        validTo: baseScenario?.params.validTo || INITIAL_PARAMS.validTo,
-        promoSeasons: (baseScenario?.params.promoSeasons || []).map(s => ({...s, id: `promo-${Date.now()}-${Math.random().toString(36).substr(2,5)}`})),
-        regularSeasons: (baseScenario?.params.regularSeasons || []).map(s => ({...s, id: `reg-${Date.now()}-${Math.random().toString(36).substr(2,5)}`}))
+    const updatedScenario = { 
+      ...activeScenario, 
+      params: updatedParams,
+      calculatedData: updatedData
     };
 
-    const newScenario: Scenario = {
-      id: newId,
-      name: "",
-      season: 0,
-      type: ScenarioType.FINAL,
-      category: selectedCategory, 
-      baseScenarioId: baseScenario?.id || null,
-      status: ScenarioStatus.DRAFT,
-      createdAt: new Date().toISOString(),
-      params: newParams,
-      coefficients: baseScenario ? [...baseScenario.coefficients.map(c => ({...c}))] : [...defaultCoefficients],
-      calculatedData: []
-    };
-    
-    newScenario.calculatedData = calculateScenarioPrices(newScenario.params, newScenario.coefficients, selectedCategory);
-
-    setScenarios(prev => [newScenario, ...prev]);
-    setActiveScenarioId(newId);
-    setActiveTab('params');
-    notify(`Nuevo borrador de ${selectedCategory} creado.`, "info");
-  };
-
-  const duplicateScenario = () => {
-    if (!activeScenario) return;
-    const newId = `copy-${Date.now()}`;
-    const copy: Scenario = {
-      ...activeScenario,
-      id: newId,
-      name: `${activeScenario.name} (Copia)`,
-      status: ScenarioStatus.DRAFT,
-      createdAt: new Date().toISOString(),
-      closedAt: undefined,
-    };
-    copy.calculatedData = calculateScenarioPrices(copy.params, copy.coefficients, copy.category || 'LIFT');
-
-    setScenarios(prev => [copy, ...prev]);
-    setActiveScenarioId(newId);
-    notify("Escenario duplicado (Local).", "success");
-  };
-
-  const renameScenario = (name: string) => {
-    if (!activeScenario || activeScenario.status === ScenarioStatus.CLOSED) return;
-    setScenarios(scenarios.map(s => s.id === activeScenarioId ? { ...s, name } : s));
-  };
-
-  const updateSeason = (season: number) => {
-    if (!activeScenario || activeScenario.status === ScenarioStatus.CLOSED) return;
-    setScenarios(scenarios.map(s => s.id === activeScenarioId ? { ...s, season } : s));
-  };
-
-  const discardDraft = () => {
-    if (!activeScenario || activeScenario.status !== ScenarioStatus.DRAFT) return;
-
-    if (window.confirm("¿Cancelar la creación de este tarifario? Se perderán los cambios.")) {
-        const nextScenarios = scenarios.filter(s => s.id !== activeScenarioId);
-        setScenarios(nextScenarios);
-        
-        const fallback = nextScenarios.find(s => (s.category || 'LIFT') === selectedCategory);
-        setActiveScenarioId(fallback ? fallback.id : '');
-        
-        notify("Borrador cancelado.", "info");
-    }
-  };
-
-  const closeScenario = async () => {
-    if (!activeScenario || activeScenario.status !== ScenarioStatus.DRAFT) return;
-    
-    if (!activeScenario.name || activeScenario.name.trim() === "") {
-        notify("Error: El tarifario debe tener un NOMBRE.", "warning");
-        return;
-    }
-    if (!activeScenario.season || activeScenario.season === 0) {
-        notify("Error: Debes ingresar un AÑO (Temporada) válido.", "warning");
-        return;
-    }
-
-    if (!window.confirm(`¿Confirmar cierre de tarifario "${activeScenario.name}"?\n\nAl confirmar, los datos se guardarán en la BASE DE DATOS.`)) return;
-
-    setIsLoading(true);
-    setLoadingMessage('Guardando en base de datos...');
+    // Actualizamos localmente rápido
+    setScenarios(prev => prev.map(s => s.id === activeScenario.id ? updatedScenario : s));
 
     try {
-      const closedScenario: Scenario = {
-        ...activeScenario,
-        status: ScenarioStatus.CLOSED,
-        closedAt: new Date().toISOString()
-      };
-
-      const success = await BackendService.saveScenario(closedScenario);
-
-      if (success) {
-        const logEntry: HistoryLogEntry = {
-          scenarioId: closedScenario.id,
-          name: closedScenario.name,
-          season: closedScenario.season,
-          scenarioType: closedScenario.type,
-          status: ScenarioStatus.CLOSED,
-          closedAt: closedScenario.closedAt!,
-          // --- CORRECCIÓN DE PERSISTENCIA: GUARDAR CATEGORÍA ---
-          category: closedScenario.category || 'LIFT', 
-          data: closedScenario.calculatedData,
-          params: closedScenario.params
-        };
-
-        setScenarios(prev => prev.map(s => s.id === activeScenarioId ? closedScenario : s));
-        setHistory(prev => [logEntry, ...prev]);
-        setActiveTab('history');
-        notify("Escenario guardado exitosamente en DB.", "success");
-      } else {
-        throw new Error("El backend devolvió falso.");
-      }
-    } catch (error) {
-      console.error(error);
-      notify("Error al guardar en base de datos.", "error");
-    } finally {
-      setIsLoading(false);
-      setLoadingMessage('');
+      // Intentamos guardar en DB (El backend validará de nuevo)
+      await api.updateScenario(updatedScenario);
+    } catch (e: any) {
+      // Rollback si falla (ej. si otro usuario lo cerró mientras tanto)
+      console.error(e);
+      addToast(`Error guardando: ${e.message}`, 'error');
+      loadScenarios(); // Recargamos para tener la verdad
     }
   };
 
-  const updateParams = (newParams: Partial<Scenario['params']>) => {
-    if (!activeScenario || activeScenario.status === ScenarioStatus.CLOSED) return;
-    const updated = { ...activeScenario, params: { ...activeScenario.params, ...newParams } };
+  const updateCoefficient = async (day: number, value: number) => {
+    if (!activeScenario) return;
+
+    // 1. CANDADO LÓGICO
+    if (!isEditable(activeScenario)) {
+      addToast('ACCIÓN DENEGADA: El tarifario está cerrado.', 'error');
+      return;
+    }
+
+    const updatedCoeffs = activeScenario.coefficients.map(c => 
+      c.day === day ? { ...c, value } : c
+    );
     
-    updated.calculatedData = calculateScenarioPrices(updated.params, updated.coefficients, updated.category || 'LIFT');
-    
-    setScenarios(scenarios.map(s => s.id === activeScenarioId ? updated : s));
+    const updatedData = calculatePricingData(activeScenario.params, updatedCoeffs);
+    const updatedScenario = { 
+      ...activeScenario, 
+      coefficients: updatedCoeffs,
+      calculatedData: updatedData 
+    };
+
+    setScenarios(prev => prev.map(s => s.id === activeScenario.id ? updatedScenario : s));
+
+    try {
+      await api.updateScenario(updatedScenario);
+    } catch (e: any) {
+      addToast(`Error al guardar: ${e.message}`, 'error');
+      loadScenarios();
+    }
   };
 
-  const updateCoefficient = (day: number, value: number) => {
-    if (!activeScenario || activeScenario.status === ScenarioStatus.CLOSED) return;
-    const updated = { ...activeScenario, coefficients: activeScenario.coefficients.map(c => c.day === day ? { ...c, value } : c) };
-    
-    updated.calculatedData = calculateScenarioPrices(updated.params, updated.coefficients, updated.category || 'LIFT');
-    
-    setScenarios(scenarios.map(s => s.id === activeScenarioId ? updated : s));
+  const renameScenario = async (id: string, newName: string) => {
+    const target = scenarios.find(s => s.id === id);
+    if (!target) return;
+
+    // Permitimos renombrar solo si es editable (o podrías decidir que renombrar sí se puede)
+    if (!isEditable(target)) {
+      addToast('No se puede renombrar un escenario cerrado.', 'error');
+      return;
+    }
+
+    try {
+      const updated = { ...target, name: newName };
+      await api.updateScenario(updated);
+      setScenarios(prev => prev.map(s => s.id === id ? updated : s));
+      addToast('Nombre actualizado', 'success');
+    } catch (e) {
+      addToast('Error al renombrar', 'error');
+    }
+  };
+
+  const updateSeason = async (id: string, newSeason: number) => {
+    const target = scenarios.find(s => s.id === id);
+    if (!target) return;
+
+    if (!isEditable(target)) {
+      addToast('No se puede cambiar la temporada de un histórico.', 'error');
+      return;
+    }
+
+    try {
+      const updated = { ...target, season: newSeason };
+      await api.updateScenario(updated);
+      setScenarios(prev => prev.map(s => s.id === id ? updated : s));
+    } catch (e) {
+      addToast('Error al actualizar temporada', 'error');
+    }
+  };
+
+  const duplicateScenario = async (id: string) => {
+    const source = scenarios.find(s => s.id === id);
+    if (!source) return;
+    await createScenario(`${source.name} (Copia)`, ScenarioType.DRAFT, id);
+  };
+
+  const closeScenario = async (id: string) => {
+    const target = scenarios.find(s => s.id === id);
+    if (!target) return;
+
+    if (target.status === ScenarioStatus.CLOSED) {
+        addToast('El escenario ya está cerrado.', 'info');
+        return;
+    }
+
+    if (!window.confirm('¿Está seguro de CERRAR este tarifario? Se volverá inmutable.')) return;
+
+    try {
+      const updated = { 
+        ...target, 
+        status: ScenarioStatus.CLOSED, 
+        type: ScenarioType.FINAL, // Forzamos tipo Final al cerrar
+        closedAt: new Date().toISOString() 
+      };
+      
+      await api.updateScenario(updated);
+      setScenarios(prev => prev.map(s => s.id === id ? updated : s));
+      addToast('Tarifario cerrado y protegido correctamente.', 'success');
+    } catch (e) {
+      addToast('Error al cerrar tarifario', 'error');
+    }
+  };
+
+  const discardDraft = async (id: string) => {
+    const target = scenarios.find(s => s.id === id);
+    if (!target) return;
+
+    // Protección adicional: No borrar históricos cerrados por error
+    if (target.status === ScenarioStatus.CLOSED) {
+      addToast('No se puede eliminar un tarifario cerrado (Histórico).', 'error');
+      return;
+    }
+
+    if (!window.confirm('¿Eliminar este borrador permanentemente?')) return;
+
+    try {
+      await api.deleteScenario(id);
+      setScenarios(prev => prev.filter(s => s.id !== id));
+      if (activeScenarioId === id) setActiveScenarioId(null);
+      addToast('Borrador eliminado', 'info');
+    } catch (e) {
+      addToast('Error eliminando', 'error');
+    }
   };
 
   return {
     scenarios,
     filteredScenarios,
+    history, // Lista de cerrados
+    activeScenario,
+    activeScenarioId,
+    isLoading,
+    loadingMessage,
+    activeTab,
     selectedCategory,
-    setSelectedCategory,
-    activeScenarioId, 
-    activeScenario, 
-    history, 
-    isLoading, 
-    loadingMessage, 
-    activeTab, 
     toasts,
-    removeToast, 
-    setActiveTab, 
-    setActiveScenarioId, 
-    createScenario, 
-    duplicateScenario, 
+    removeToast,
+    setActiveTab,
+    setSelectedCategory,
+    setActiveScenarioId,
+    createScenario,
+    updateParams,
+    updateCoefficient,
+    updateSeason,
     renameScenario,
-    updateSeason, 
-    discardDraft, 
-    closeScenario, 
-    updateParams, 
-    updateCoefficient
+    duplicateScenario,
+    closeScenario,
+    discardDraft,
+    isEditable // Exportamos esta utilidad por si la UI la necesita
   };
 };
