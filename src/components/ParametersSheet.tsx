@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Scenario, ScenarioStatus, ScenarioType } from '../types';
-import { Calendar, AlertCircle, Plus, Trash2, Tag, Lock } from 'lucide-react';
+import { Calendar, AlertCircle, Plus, Trash2, Tag, Lock, Percent } from 'lucide-react';
 import { validateScenarioDates } from '../utils';
 import { getItemsByCategory } from '../constants';
 
@@ -84,6 +84,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
 
   return (
     <div className="p-6 bg-white shadow-sm rounded-lg max-w-5xl mx-auto mt-6 mb-12">
+      {/* HEADER DE ESTADO */}
       <div className="flex justify-between items-center mb-6 border-b pb-2">
         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
            Configuración de Parámetros 
@@ -107,7 +108,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
         </div>
       )}
 
-      {/* FIX: SECCIÓN VIGENCIA GENERAL AGREGADA */}
+      {/* SECCIÓN VIGENCIA GENERAL */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div>
               <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Vigencia General (Inicio)</label>
@@ -132,6 +133,7 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        {/* COLUMNA 1: PRECIOS */}
         <div className="lg:col-span-2 space-y-6">
             {!isRental && (
                 <div className={`bg-blue-50 p-5 rounded-lg border border-blue-100 ${isReadOnly ? 'opacity-75 grayscale' : ''}`}>
@@ -174,9 +176,10 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
             )}
         </div>
 
+        {/* COLUMNA 2: AJUSTES (Inputs de descuentos restituidos) */}
         <div className="space-y-4">
             <div className={`bg-orange-50 p-4 rounded-md border border-orange-100 ${isReadOnly ? 'opacity-75' : ''}`}>
-                <label className="block text-sm font-bold text-orange-900 mb-1">% Aumento</label>
+                <label className="block text-sm font-bold text-orange-900 mb-1 flex items-center gap-1"><Percent size={14}/> Aumento Base</label>
                 <input
                     type="number"
                     step="0.1"
@@ -186,9 +189,33 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                     className={`block w-full font-bold border-gray-300 rounded-md ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`}
                 />
             </div>
-            {/* Otros inputs de ajuste */}
+
+            <div className={`bg-purple-50 p-4 rounded-md border border-purple-100 ${isReadOnly ? 'opacity-75' : ''}`}>
+                <label className="block text-sm font-bold text-purple-900 mb-1 flex items-center gap-1"><Percent size={14}/> Descuento Menor</label>
+                <input
+                    type="number"
+                    step="0.1"
+                    disabled={isReadOnly}
+                    value={scenario.params.minorDiscountPercentage}
+                    onChange={(e) => handleChange('minorDiscountPercentage', e.target.value)}
+                    className={`block w-full font-bold border-gray-300 rounded-md ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`}
+                />
+            </div>
+
+            <div className={`bg-green-50 p-4 rounded-md border border-green-100 ${isReadOnly ? 'opacity-75' : ''}`}>
+                <label className="block text-sm font-bold text-green-900 mb-1 flex items-center gap-1"><Percent size={14}/> Descuento Promo</label>
+                <input
+                    type="number"
+                    step="0.1"
+                    disabled={isReadOnly}
+                    value={scenario.params.promoDiscountPercentage}
+                    onChange={(e) => handleChange('promoDiscountPercentage', e.target.value)}
+                    className={`block w-full font-bold border-gray-300 rounded-md ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`}
+                />
+            </div>
+
             <div className={`bg-gray-50 p-4 rounded-md border border-gray-200 ${isReadOnly ? 'opacity-75' : ''}`}>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Redondeo</label>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Redondeo (Múltiplo)</label>
                 <input
                     type="number"
                     disabled={isReadOnly}
@@ -200,9 +227,10 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
         </div>
       </div>
 
+      {/* FECHAS */}
       <div className="border-t pt-6">
         <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <Calendar className="text-gray-600" /> Temporadas y Rangos
+          <Calendar className="text-gray-600" /> Configuración de Fechas
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
              <DateRangeSection 

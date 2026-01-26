@@ -9,7 +9,6 @@ import {
 // CONSTANTES INICIALES
 // ==========================================
 
-// FIX: Lista explícita de días permitidos
 const ALLOWED_DAYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
 
 export const INITIAL_COEFFICIENTS: CoefficientRow[] = ALLOWED_DAYS.map(day => ({
@@ -97,27 +96,66 @@ export const validateScenarioDates = (params: ScenarioParams): string | null => 
 // ==========================================
 
 const calculateLiftPrices = (params: ScenarioParams, coefficients: CoefficientRow[]): PricingRow[] => {
-    const { baseRateAdult1Day, increasePercentage, roundingValue, minorDiscountPercentage, promoDiscountPercentage } = params;
+    const { 
+        baseRateAdult1Day = 0, 
+        increasePercentage = 0, 
+        roundingValue = 100, 
+        minorDiscountPercentage = 0, 
+        promoDiscountPercentage = 0 
+    } = params;
     
-    const baseAdult = baseRateAdult1Day * (1 + increasePercentage / 100);
+    // 1. DEFINICIÓN DE BASES (Origen de datos)
+    // Base Adulto = Base Configurada * (1 + Aumento)
+    const adultBasePrice = baseRateAdult1Day * (1 + increasePercentage / 100);
+    
+    // Base Menor = Base Adulto * (1 - Descuento Menor)
+    const minorBasePrice = adultBasePrice * (1 - minorDiscountPercentage / 100);
 
     return coefficients.map(c => {
-        const rawLineal = baseAdult * c.day;
-        const dayDiscountFactor = 1 - (c.value / 100);
-        const adultRegularRaw = rawLineal * dayDiscountFactor;
+        const days = c.day;
+        // Coeficiente de descuento por tiempo (ej: si value es 5%, el factor es 0.95)
+        const timeDiscountFactor = 1 - (c.value / 100);
         
-        const adultRegularVisual = roundUp(adultRegularRaw, roundingValue);
-
-        const minorFactor = 1 - (minorDiscountPercentage / 100);
-        let minorRegularRaw = adultRegularVisual * minorFactor;
-        const minorRegularVisual = roundDown(minorRegularRaw, roundingValue);
-
+        // 2. CÁLCULO DE TEMPORADA REGULAR
+        // Precio = (Base * Días) * FactorTiempo
+        const adultRegularRaw = (adultBasePrice * days) * timeDiscountFactor;
+        const minorRegularRaw = (minorBasePrice * days) * timeDiscountFactor;
+        
+        // 3. CÁLCULO DE TEMPORADA PROMOCIONAL (Derivada de Regular)
         const promoFactor = 1 - (promoDiscountPercentage / 100);
-        const adultPromoRaw = adultRegularVisual * promoFactor;
-        const adultPromoVisual = roundUp(adultPromoRaw, roundingValue);
+        
+        const adultPromoRaw = adultRegularRaw * promoFactor;
+        const minorPromoRaw = minorRegularRaw * promoFactor; 
 
-        const minorPromoRaw = minorRegularVisual * promoFactor;
-        const minorPromoVisual = roundDown(minorPromoRaw, roundingValue);
+        // 4. REDONDEOS Y VISUALIZACIÓN
+        // Adulto Regular: Hacia arriba
+        const adultRegularVisual = roundUp(adultRegularRaw, roundingValue);
+        
+        // Menor Regular: Hacia abajo (floor)
+        let minorRegularVisual = roundDown(minorRegularRaw, roundingValue);
+        
+        // REGLA DE NEGOCIO: Tope Menor <= 70% del Adulto Visual
+        // Validamos que el precio visual del menor no rompa la regla histórica
+        const minorCap = adultRegularVisual * 0.70;
+        if (minorRegularVisual > minorCap) {
+            minorRegularVisual = roundDown(minorCap, roundingValue); 
+        }
+
+        // Promo Visuales
+        const adultPromoVisual = roundUp(adultPromoRaw, roundingValue);
+        let minorPromoVisual = roundDown(minorPromoRaw, roundingValue);
+        
+        // Tope Promo Menor
+        const minorPromoCap = adultPromoVisual * 0.70;
+        if (minorPromoVisual > minorPromoCap) {
+            minorPromoVisual = roundDown(minorPromoCap, roundingValue);
+        }
+
+        // Sistema (Daily)
+        const adultRegularDailySystem = days > 0 ? adultRegularVisual / days : 0;
+        const minorRegularDailySystem = days > 0 ? minorRegularVisual / days : 0;
+        const adultPromoDailySystem = days > 0 ? adultPromoVisual / days : 0;
+        const minorPromoDailySystem = days > 0 ? minorPromoVisual / days : 0;
 
         return {
             days: c.day,
@@ -133,10 +171,10 @@ const calculateLiftPrices = (params: ScenarioParams, coefficients: CoefficientRo
             minorRegularVisual,
             minorPromoVisual,
             
-            adultRegularDailySystem: c.day > 0 ? adultRegularVisual / c.day : 0,
-            adultPromoDailySystem: c.day > 0 ? adultPromoVisual / c.day : 0,
-            minorRegularDailySystem: c.day > 0 ? minorRegularVisual / c.day : 0,
-            minorPromoDailySystem: c.day > 0 ? minorPromoVisual / c.day : 0
+            adultRegularDailySystem,
+            adultPromoDailySystem,
+            minorRegularDailySystem,
+            minorPromoDailySystem
         };
     });
 };
