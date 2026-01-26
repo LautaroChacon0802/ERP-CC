@@ -1,8 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
+import { User, AuthState, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
-import { AuthState, User, UserRole } from '../types';
 
-// Límite de inactividad: 30 minutos
 const INACTIVITY_LIMIT = 30 * 60 * 1000;
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -10,9 +9,8 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Inicialmente true para checkear sesión
 
-  // Helper seguro para obtener el rol
   const fetchUserRole = async (uid: string): Promise<UserRole> => {
     try {
       const { data, error } = await supabase
@@ -20,15 +18,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .select('role')
         .eq('id', uid)
         .maybeSingle();
-      
-      // Si hay error o no hay data, fallback a 'user'
       if (error || !data) return 'user';
-      return (data.role as UserRole) || 'user';
+      return data.role as UserRole;
     } catch {
       return 'user';
     }
   };
 
+  // --- LOGOUT ROBUSTO ---
   const logout = useCallback(async () => {
     try {
         await supabase.auth.signOut();
@@ -38,11 +35,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.removeItem('castor_user');
         setUser(null);
         setIsAuthenticated(false);
+        setLoading(false); // FIX: Desbloquear UI
         window.location.href = '/';
     }
   }, []);
 
-  // Control de inactividad
   useEffect(() => {
     if (!user) return;
     let timeoutId: NodeJS.Timeout;
@@ -65,7 +62,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [user, logout]);
 
-  // Inicialización de Sesión
   useEffect(() => {
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -85,9 +81,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        // Evitar refetch si ya tenemos el usuario cargado
         if (user?.id === session.user.id) return;
-        
         const role = await fetchUserRole(session.user.id);
         setUser({
           id: session.user.id,
@@ -104,7 +98,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => subscription.unsubscribe();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const login = async (email: string, pass: string) => {
     setLoading(true);

@@ -9,8 +9,11 @@ import {
 // CONSTANTES INICIALES
 // ==========================================
 
-export const INITIAL_COEFFICIENTS: CoefficientRow[] = Array.from({ length: 15 }, (_, i) => ({
-  day: i + 1,
+// FIX: Lista explícita de días permitidos
+const ALLOWED_DAYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
+
+export const INITIAL_COEFFICIENTS: CoefficientRow[] = ALLOWED_DAYS.map(day => ({
+  day,
   value: 0
 }));
 
@@ -58,29 +61,24 @@ export const migrateParams = (params: any): ScenarioParams => {
 };
 
 // ==========================================
-// VALIDACIONES (MEJORADA)
+// VALIDACIONES
 // ==========================================
 
-// Helper puro para chequear intersección de fechas
 const areDatesOverlapping = (startA: string, endA: string, startB: string, endB: string): boolean => {
   const sA = new Date(startA + 'T00:00:00').getTime();
   const eA = new Date(endA + 'T00:00:00').getTime();
   const sB = new Date(startB + 'T00:00:00').getTime();
   const eB = new Date(endB + 'T00:00:00').getTime();
   
-  // Lógica de solapamiento: El inicio de A es antes del fin de B Y el fin de A es después del inicio de B
   return (sA <= eB) && (eA >= sB);
 };
 
 export const validateScenarioDates = (params: ScenarioParams): string | null => {
-    // 1. Validar Vigencia General
     if (!params.validFrom || !params.validTo) return "Las fechas de Vigencia General deben estar definidas.";
     
     const d = (s: string) => new Date(s + 'T00:00:00').getTime();
     if (d(params.validFrom) > d(params.validTo)) return "Error en Vigencia General: 'Desde' es posterior a 'Hasta'.";
 
-    // 2. Validar Solapamientos entre Temporadas (Regular vs Promo)
-    // Esto previene que un día tenga dos precios contradictorios definidos por fecha
     if (params.regularSeasons && params.promoSeasons) {
         for (const reg of params.regularSeasons) {
             for (const promo of params.promoSeasons) {
@@ -90,9 +88,6 @@ export const validateScenarioDates = (params: ScenarioParams): string | null => 
             }
         }
     }
-    
-    // 3. Validar Solapamientos internos (Regular vs Regular, Promo vs Promo) - Opcional pero recomendado
-    // ...se podría extender aquí si se desea
 
     return null;
 };
@@ -147,7 +142,6 @@ const calculateLiftPrices = (params: ScenarioParams, coefficients: CoefficientRo
 };
 
 const calculateRentalPrices = (params: ScenarioParams, coefficients: CoefficientRow[], category: ScenarioCategory): PricingRow[] => {
-    // Placeholder para lógica rental
     return coefficients.map(c => ({
         days: c.day,
         coefficient: c.value,

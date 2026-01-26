@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Scenario, ScenarioStatus, DateRange, ScenarioType } from '../types';
+import { Scenario, ScenarioStatus, ScenarioType } from '../types';
 import { Calendar, AlertCircle, Plus, Trash2, Tag, Lock } from 'lucide-react';
 import { validateScenarioDates } from '../utils';
 import { getItemsByCategory } from '../constants';
@@ -9,7 +9,6 @@ interface Props {
   onUpdateParams: (params: Partial<Scenario['params']>) => void;
 }
 
-// Helper component para rangos de fechas (simplificado para el ejemplo)
 const DateRangeSection = ({
   title, ranges, onAdd, onRemove, onUpdate, isReadOnly, colorClass, headerColor
 }: any) => {
@@ -24,7 +23,7 @@ const DateRangeSection = ({
         )}
       </div>
       <div className="space-y-3">
-        {ranges?.map((range: any, idx: number) => (
+        {ranges?.map((range: any) => (
           <div key={range.id} className="flex gap-2 p-2 bg-gray-50 border rounded relative">
              <input type="date" disabled={isReadOnly} value={range.start} onChange={(e) => onUpdate(range.id, 'start', e.target.value)} className={`text-xs border rounded p-1 ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`} />
              <input type="date" disabled={isReadOnly} value={range.end} onChange={(e) => onUpdate(range.id, 'end', e.target.value)} className={`text-xs border rounded p-1 ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`} />
@@ -38,18 +37,9 @@ const DateRangeSection = ({
 };
 
 const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
-  // =========================================================================
-  // LOGICA DE PERMISOS UI
-  // =========================================================================
   const isReadOnly = useMemo(() => {
-    // 1. Regla de Estado: Si está cerrado o es Final -> Bloqueado
     if (scenario.status === ScenarioStatus.CLOSED) return true;
     if (scenario.type === ScenarioType.FINAL) return true;
-    
-    // 2. Aquí podrías agregar lógica de usuario en el futuro
-    // const { user } = useAuth();
-    // if (user.role !== 'ADMIN' && scenario.status === 'LOCKED') return true;
-    
     return false;
   }, [scenario.status, scenario.type]);
 
@@ -58,7 +48,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
   const rentalItems = useMemo(() => isRental ? getItemsByCategory(category) : [], [category, isRental]);
   const dateError = useMemo(() => validateScenarioDates(scenario.params), [scenario.params]);
 
-  // Handlers seguros
   const handleChange = (field: keyof Scenario['params'], value: string) => {
     if (isReadOnly) return;
     const isDate = field === 'validFrom' || field === 'validTo';
@@ -73,7 +62,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
     onUpdateParams({ rentalBasePrices: currentPrices });
   };
 
-  // Generic Date Range Handlers (simplificado)
   const handleUpdateRange = (field: string, id: string, subField: string, val: string) => {
      if (isReadOnly) return;
      const list = (scenario.params as any)[field] || [];
@@ -81,7 +69,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
      onUpdateParams({ [field]: newList });
   };
 
-  // ... (Add and Remove handlers would be similar) ...
   const handleAddRange = (field: 'regularSeasons' | 'promoSeasons') => {
     if (isReadOnly) return;
     const currentList = scenario.params[field] || [];
@@ -97,7 +84,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
 
   return (
     <div className="p-6 bg-white shadow-sm rounded-lg max-w-5xl mx-auto mt-6 mb-12">
-      {/* HEADER DE ESTADO */}
       <div className="flex justify-between items-center mb-6 border-b pb-2">
         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
            Configuración de Parámetros 
@@ -121,8 +107,31 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
         </div>
       )}
 
+      {/* FIX: SECCIÓN VIGENCIA GENERAL AGREGADA */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Vigencia General (Inicio)</label>
+              <input 
+                  type="date" 
+                  disabled={isReadOnly}
+                  value={scenario.params.validFrom} 
+                  onChange={(e) => handleChange('validFrom', e.target.value)}
+                  className={`w-full border-gray-300 rounded-md p-2 ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`}
+              />
+          </div>
+          <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1 uppercase">Vigencia General (Fin)</label>
+              <input 
+                  type="date" 
+                  disabled={isReadOnly}
+                  value={scenario.params.validTo} 
+                  onChange={(e) => handleChange('validTo', e.target.value)}
+                  className={`w-full border-gray-300 rounded-md p-2 ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`}
+              />
+          </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        {/* COLUMNA 1: PRECIOS */}
         <div className="lg:col-span-2 space-y-6">
             {!isRental && (
                 <div className={`bg-blue-50 p-5 rounded-lg border border-blue-100 ${isReadOnly ? 'opacity-75 grayscale' : ''}`}>
@@ -165,7 +174,6 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
             )}
         </div>
 
-        {/* COLUMNA 2: AJUSTES */}
         <div className="space-y-4">
             <div className={`bg-orange-50 p-4 rounded-md border border-orange-100 ${isReadOnly ? 'opacity-75' : ''}`}>
                 <label className="block text-sm font-bold text-orange-900 mb-1">% Aumento</label>
@@ -178,17 +186,25 @@ const ParametersSheet: React.FC<Props> = ({ scenario, onUpdateParams }) => {
                     className={`block w-full font-bold border-gray-300 rounded-md ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`}
                 />
             </div>
-            {/* ... Resto de inputs (redondeo, etc) con la misma lógica disabled={isReadOnly} ... */}
+            {/* Otros inputs de ajuste */}
+            <div className={`bg-gray-50 p-4 rounded-md border border-gray-200 ${isReadOnly ? 'opacity-75' : ''}`}>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Redondeo</label>
+                <input
+                    type="number"
+                    disabled={isReadOnly}
+                    value={scenario.params.roundingValue}
+                    onChange={(e) => handleChange('roundingValue', e.target.value)}
+                    className={`block w-full font-bold border-gray-300 rounded-md ${isReadOnly ? 'bg-gray-200' : 'bg-white'}`}
+                />
+            </div>
         </div>
       </div>
 
-      {/* FECHAS */}
       <div className="border-t pt-6">
         <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <Calendar className="text-gray-600" /> Configuración de Fechas
+          <Calendar className="text-gray-600" /> Temporadas y Rangos
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-             {/* Componentes DateRangeSection usan isReadOnly internamente */}
              <DateRangeSection 
                 title="Temporada Regular" 
                 ranges={scenario.params.regularSeasons} 

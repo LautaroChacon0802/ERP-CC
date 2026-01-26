@@ -18,15 +18,12 @@ export const useScenarioData = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadingMessage, setLoadingMessage] = useState<string>('Iniciando sistema...');
 
-  // --- INTERNAL HELPERS ---
   const generateId = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
     }
     return `sc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   };
-
-  // --- API ACTIONS ---
 
   const loadInitialData = useCallback(async (): Promise<string | null> => {
     try {
@@ -41,7 +38,6 @@ export const useScenarioData = () => {
           params: migrateParams(entry.params)
       }));
 
-      // Convertimos a LogEntry para historial visual
       const logEntries: HistoryLogEntry[] = migratedHistory.map(h => ({
         scenarioId: h.id,
         name: h.name,
@@ -57,7 +53,6 @@ export const useScenarioData = () => {
       setHistory(logEntries);
       setDefaultCoefficients(configCoefs);
 
-      // Seed Logic: Si no hay historia, creamos un seed en memoria
       if (migratedHistory.length === 0) {
           const seedId = generateId();
           const seedScenario: Scenario = {
@@ -77,8 +72,21 @@ export const useScenarioData = () => {
           setScenarios([seedScenario]);
           return seedScenario.id; 
       } else {
-          // Cargamos escenarios existentes
-          setScenarios(migratedHistory);
+          const loadedScenarios: Scenario[] = migratedHistory.map(h => ({
+              id: h.id, 
+              name: h.name || 'Escenario Recuperado',
+              season: h.season,
+              type: h.type as ScenarioType,
+              category: h.category || 'LIFT', 
+              baseScenarioId: h.baseScenarioId || null,
+              status: h.status,
+              createdAt: h.createdAt || new Date().toISOString(),
+              closedAt: h.closedAt,
+              params: h.params,
+              coefficients: (h.coefficients && h.coefficients.length > 0) ? h.coefficients : configCoefs,
+              calculatedData: h.calculatedData || []
+          }));
+          setScenarios(loadedScenarios);
           return null; 
       }
     } catch (error) {
@@ -107,7 +115,8 @@ export const useScenarioData = () => {
       id: newId,
       name: "",
       season: 0,
-      type: ScenarioType.FINAL,
+      // FIX: Inicializar como DRAFT (Borrador) y no FINAL para permitir edición
+      type: ScenarioType.DRAFT, 
       category: category, 
       baseScenarioId: baseScenarioId,
       status: ScenarioStatus.DRAFT,
@@ -150,7 +159,6 @@ export const useScenarioData = () => {
     try {
         setLoadingMessage('Guardando en base de datos...');
         const success = await BackendService.saveScenario(scenario);
-        
         if (!success) throw new Error("Backend reject");
 
         const logEntry: HistoryLogEntry = {
