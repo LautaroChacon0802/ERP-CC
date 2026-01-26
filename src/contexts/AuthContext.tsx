@@ -9,82 +9,110 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Helper para obtener el rol desde la DB
+  // --- HELPER ROBUSTO: fetchUserRole ---
+  // Nunca lanza error. Si falla, devuelve 'user' por defecto.
   const fetchUserRole = async (uid: string): Promise<UserRole> => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', uid)
-        .single();
+        .maybeSingle(); // Usamos maybeSingle para no recibir error si no hay filas
       
-      if (error || !data) return 'user';
+      if (error) {
+        console.warn("AuthContext: Error leyendo rol, asignando 'user'", error.message);
+        return 'user';
+      }
+      
+      if (!data) {
+        console.warn("AuthContext: Perfil no encontrado, asignando 'user'");
+        return 'user';
+      }
+
       return data.role as UserRole;
-    } catch {
-      return 'user';
+
+    } catch (err) {
+      console.error("AuthContext: Excepción crítica leyendo rol", err);
+      return 'user'; // Fallback seguro
     }
   };
 
   useEffect(() => {
-    // 1. Check Session Inicial
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const role = await fetchUserRole(session.user.id);
-        setUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          name: session.user.user_metadata.full_name || 'Usuario',
-          role: role // Rol real desde la DB
-        });
-        setIsAuthenticated(true);
+    const initAuth = async () => {
+      try {
+        // 1. Obtener Sesión Actual
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) throw error;
+
+        if (session?.user) {
+          // Intentamos obtener el rol, pero no bloqueamos si falla
+          const role = await fetchUserRole(session.user.id);
+          
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.user_metadata?.full_name || 'Usuario',
+            role: role 
+          });
+          setIsAuthenticated(true);
+        }
+      } catch (e) {
+        console.error("Error inicializando auth:", e);
+        // No seteamos user, queda como null (login screen)
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
-    checkSession();
+    initAuth();
 
-    // 2. Escuchar cambios
+    // 2. Escuchar cambios en tiempo real
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        // Optimización: Si ya tenemos el usuario y es el mismo, no refetch
+      if (session?.user) {
+        // Optimización: evitar refetch si el ID no cambió
         if (user?.id === session.user.id) return;
 
+        setLoading(true); // Breve loading mientras traemos el rol
         const role = await fetchUserRole(session.user.id);
+        
         setUser({
           id: session.user.id,
           email: session.user.email || '',
-          name: session.user.user_metadata.full_name || 'Usuario',
+          name: session.user.user_metadata?.full_name || 'Usuario',
           role: role
         });
         setIsAuthenticated(true);
+        setLoading(false);
       } else {
         setUser(null);
         setIsAuthenticated(false);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Dependencias vacías para mount único
 
   const login = async (email: string, pass: string) => {
-    setLoading(true);
+    // Nota: setLoading(true) no es necesario aquí porque el onAuthStateChange lo manejará
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password: pass,
     });
-    if (error) {
-        setLoading(false);
-        throw error;
-    }
-    // El onAuthStateChange manejará el seteo del estado
+    if (error) throw error;
   };
 
   const logout = async () => {
+    setLoading(true);
     await supabase.auth.signOut();
     setUser(null);
     setIsAuthenticated(false);
+    setLoading(false);
+    // Forzamos limpieza local por si acaso
+    localStorage.clear();
+    window.location.href = '/';
   };
 
   return (
