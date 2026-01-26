@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Scenario, ScenarioParams, ScenarioStatus, ScenarioType } from '../types';
 
-// Helper para parsear JSON de forma segura si viene como string
+// Helper para parsear JSON de forma segura
 const safeJsonParse = (val: any, fallback: any) => {
   if (typeof val === 'string') {
     try {
@@ -16,8 +16,9 @@ const safeJsonParse = (val: any, fallback: any) => {
 // --- CRUD OPERATIONS ---
 
 export const fetchScenarios = async (): Promise<Scenario[]> => {
+  // CRÍTICO: Nueva tabla pricing_scenarios
   const { data, error } = await supabase
-    .from('scenarios')
+    .from('pricing_scenarios')
     .select('*')
     .order('created_at', { ascending: false });
 
@@ -32,12 +33,12 @@ export const fetchScenarios = async (): Promise<Scenario[]> => {
     status: s.status as ScenarioStatus,
     category: s.category,
     
-    // Mapeo explícito de campos compuestos
+    // Mapeo explícito
     baseScenarioId: s.base_scenario_id,
     createdAt: s.created_at,
     closedAt: s.closed_at,
     
-    // Parsing seguro de campos JSONB
+    // Parsing JSONB
     params: safeJsonParse(s.params, {}),
     coefficients: safeJsonParse(s.coefficients, []),
     calculatedData: safeJsonParse(s.calculated_data, []),
@@ -46,19 +47,21 @@ export const fetchScenarios = async (): Promise<Scenario[]> => {
 
 export const createScenario = async (scenario: Scenario) => {
   // MAPEO INVERSO: CamelCase (App) -> Snake_case (DB)
-  const { error } = await supabase.from('scenarios').insert({
+  const { error } = await supabase.from('pricing_scenarios').insert({
     id: scenario.id,
     name: scenario.name,
     season: scenario.season,
     type: scenario.type,
     status: scenario.status,
     category: scenario.category,
+    
     base_scenario_id: scenario.baseScenarioId,
     created_at: scenario.createdAt,
     closed_at: scenario.closedAt,
+    
     params: scenario.params,
     coefficients: scenario.coefficients,
-    calculated_data: scenario.calculatedData // Importante: guardar la data calculada
+    calculated_data: scenario.calculatedData 
   });
 
   if (error) throw error;
@@ -67,16 +70,17 @@ export const createScenario = async (scenario: Scenario) => {
 
 export const updateScenario = async (scenario: Scenario) => {
   const { error } = await supabase
-    .from('scenarios')
+    .from('pricing_scenarios')
     .update({
       name: scenario.name,
       season: scenario.season,
       type: scenario.type,
       status: scenario.status,
-      closed_at: scenario.closedAt, // Actualizar fecha cierre si aplica
+      closed_at: scenario.closedAt,
       params: scenario.params,
       coefficients: scenario.coefficients,
-      calculated_data: scenario.calculatedData
+      calculated_data: scenario.calculatedData,
+      updated_at: new Date().toISOString()
     })
     .eq('id', scenario.id);
 
@@ -86,8 +90,11 @@ export const updateScenario = async (scenario: Scenario) => {
 
 export const updateScenarioParams = async (id: string, params: ScenarioParams) => {
   const { error } = await supabase
-    .from('scenarios')
-    .update({ params })
+    .from('pricing_scenarios')
+    .update({ 
+        params,
+        updated_at: new Date().toISOString()
+    })
     .eq('id', id);
 
   if (error) throw error;
@@ -95,20 +102,24 @@ export const updateScenarioParams = async (id: string, params: ScenarioParams) =
 };
 
 export const deleteScenario = async (id: string) => {
-  const { error } = await supabase.from('scenarios').delete().eq('id', id);
+  const { error } = await supabase.from('pricing_scenarios').delete().eq('id', id);
   if (error) throw error;
   return true;
 };
 
-// --- SERVICE OBJECT (Singleton-like access) ---
+// --- SERVICE OBJECT ---
 export const BackendService = {
   getHistory: fetchScenarios,
-  getDefaultCoefficients: async () => Array.from({ length: 15 }, (_, i) => ({ day: i + 1, value: 0 })),
+  getDefaultCoefficients: async () => {
+      // Intentar buscar de la tabla de config, fallback al default si está vacía
+      const { data } = await supabase.from('config_coefficients').select('*').order('day');
+      if (data && data.length > 0) return data;
+      return Array.from({ length: 15 }, (_, i) => ({ day: i + 1, value: 0 }));
+  },
   
   saveScenario: async (scenario: Scenario) => {
     try {
-      // Upsert logic manual para mayor control
-      const { data } = await supabase.from('scenarios').select('id').eq('id', scenario.id).maybeSingle();
+      const { data } = await supabase.from('pricing_scenarios').select('id').eq('id', scenario.id).maybeSingle();
       if (data) {
         await updateScenario(scenario);
       } else {

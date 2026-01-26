@@ -1,7 +1,7 @@
 // ==========================================
 // ENUMS & BASIC TYPES
 // ==========================================
-export type UserRole = 'ADMIN' | 'PRICING_ACCESS' | 'GASTRO_ACCESS' | 'STOCK_ACCESS';
+export type UserRole = 'admin' | 'pricing_manager' | 'user';
 
 // Categorías de Tarifarios
 export type ScenarioCategory = 'LIFT' | 'RENTAL_MOUNTAIN' | 'RENTAL_CITY' | 'RENTAL_ALPINO';
@@ -21,19 +21,6 @@ export interface DateRange {
   id: string;
   start: string;
   end: string;
-}
-
-// ==========================================
-// RENTAL ARCHITECTURE
-// ==========================================
-
-export interface RentalItem {
-  id: string;
-  label: string;
-  category: ScenarioCategory; 
-  type: 'SKI' | 'SNOWBOARD' | 'ACCESSORY' | 'OTHER';
-  pricingUnit: 'DAY' | 'HOUR'; 
-  isFixedDuration?: boolean; 
 }
 
 // ==========================================
@@ -93,11 +80,13 @@ export interface Scenario {
   type: ScenarioType;
   baseScenarioId: string | null;
   status: ScenarioStatus;
+  category?: ScenarioCategory; 
+  
+  // Timestamps
   createdAt: string;
   closedAt?: string;
   
-  category?: ScenarioCategory; 
-  
+  // Data
   params: ScenarioParams;
   coefficients: CoefficientRow[];
   calculatedData: PricingRow[];
@@ -110,15 +99,16 @@ export interface HistoryLogEntry {
   scenarioType: string;
   status: ScenarioStatus;
   closedAt: string;
-  category: ScenarioCategory; // <--- CAMBIO CRÍTICO: CAMPO AGREGADO
+  category: ScenarioCategory;
   data: PricingRow[];
   params: ScenarioParams;
 }
 
 export interface User {
+  id: string;
   email: string;
   name: string;
-  permissions: string[];
+  role: UserRole;
 }
 
 export interface AuthState {

@@ -36,13 +36,12 @@ export const useScenarioData = () => {
           BackendService.getDefaultCoefficients()
       ]);
 
-      // Aplicamos migraciones a los params por si la estructura cambió
       const migratedHistory = remoteHistory.map(entry => ({
           ...entry,
           params: migrateParams(entry.params)
       }));
 
-      // Convertimos a formato historial para el componente HistorySheet
+      // Convertimos a LogEntry para historial visual
       const logEntries: HistoryLogEntry[] = migratedHistory.map(h => ({
         scenarioId: h.id,
         name: h.name,
@@ -78,28 +77,8 @@ export const useScenarioData = () => {
           setScenarios([seedScenario]);
           return seedScenario.id; 
       } else {
-          // FIX APLICADO:
-          // 1. Usamos h.id en vez de h.scenarioId (h es un Scenario)
-          // 2. Usamos h.type en vez de h.scenarioType
-          // 3. Usamos h.coefficients y h.calculatedData del backend en vez de defaults vacíos.
-          const loadedScenarios: Scenario[] = migratedHistory.map(h => ({
-              id: h.id, 
-              name: h.name || 'Escenario Recuperado',
-              season: h.season,
-              type: h.type as ScenarioType,
-              category: h.category || 'LIFT', 
-              baseScenarioId: h.baseScenarioId || null,
-              status: h.status,
-              createdAt: h.createdAt || new Date().toISOString(),
-              closedAt: h.closedAt,
-              params: h.params,
-              // Priorizamos lo que viene de la DB, fallback a config por defecto si es null
-              coefficients: (h.coefficients && h.coefficients.length > 0) ? h.coefficients : configCoefs,
-              // Importante: Cargamos la data calculada para poder ver tarifarios antiguos sin recalcular
-              calculatedData: h.calculatedData || []
-          }));
-          
-          setScenarios(loadedScenarios);
+          // Cargamos escenarios existentes
+          setScenarios(migratedHistory);
           return null; 
       }
     } catch (error) {
@@ -118,7 +97,6 @@ export const useScenarioData = () => {
   ): string => {
     const newId = generateId();
     
-    // Deep copy de params
     const newParams: ScenarioParams = {
         ...baseParams,
         promoSeasons: baseParams.promoSeasons.map(s => ({...s, id: `promo-${generateId()}`})),
