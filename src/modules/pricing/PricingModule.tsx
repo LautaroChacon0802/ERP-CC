@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useScenarioManager } from '../../hooks/useScenarioManager';
 import ScenarioHeader from '../../components/ScenarioHeader';
 import SheetTabs from '../../components/SheetTabs';
@@ -7,7 +7,6 @@ import CoefficientsSheet from '../../components/CoefficientsSheet';
 import DataSheet from '../../components/DataSheet';
 import HistorySheet from '../../components/HistorySheet';
 import ComparisonSheet from '../../components/ComparisonSheet';
-import ToastSystem from '../../components/ToastSystem';
 import { Loader2, ArrowLeft, Layers } from 'lucide-react';
 import CastorLogo from '../../components/CastorLogo';
 import { SCENARIO_CATEGORIES } from '../../constants';
@@ -27,8 +26,6 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
     isLoading,
     loadingMessage,
     activeTab,
-    toasts,
-    removeToast,
     setActiveTab,
     setActiveScenarioId,
     createScenario,
@@ -44,7 +41,7 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans relative">
       
-      <ToastSystem toasts={toasts} removeToast={removeToast} />
+      {/* ToastSystem eliminado de aquí, ya está en App.tsx */}
 
       {isLoading && (
         <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
@@ -144,7 +141,6 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
                 <HistorySheet history={history} />
               )}
               
-              {/* --- ACTUALIZACIÓN AQUÍ: Pasamos los props de contexto --- */}
               {activeTab === 'compare' && (
                 <ComparisonSheet 
                     history={history}

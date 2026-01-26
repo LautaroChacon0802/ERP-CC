@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { 
   Scenario, 
   HistoryLogEntry, 
@@ -18,7 +18,7 @@ export const useScenarioData = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadingMessage, setLoadingMessage] = useState<string>('Iniciando sistema...');
 
-  // --- ACTIONS: Internal Helpers ---
+  // --- INTERNAL HELPERS ---
   const generateId = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
@@ -26,9 +26,13 @@ export const useScenarioData = () => {
     return `sc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   };
 
-  // --- ACTIONS: API & State Mutation ---
+  // --- API ACTIONS ---
 
-  const loadInitialData = useCallback(async () => {
+  /**
+   * Carga datos iniciales. Lanza error si falla.
+   * Retorna el ID del escenario que debería activarse (si es un seed nuevo) o null.
+   */
+  const loadInitialData = useCallback(async (): Promise<string | null> => {
     try {
       setLoadingMessage('Sincronizando configuración y datos...');
       const [remoteHistory, configCoefs] = await Promise.all([
@@ -44,7 +48,7 @@ export const useScenarioData = () => {
       setHistory(migratedHistory);
       setDefaultCoefficients(configCoefs);
 
-      // Seed Logic
+      // Seed Logic: Si no hay historia, creamos un seed en memoria
       if (migratedHistory.length === 0) {
           const seedId = generateId();
           const seedScenario: Scenario = {
@@ -62,8 +66,9 @@ export const useScenarioData = () => {
             calculatedData: [] 
           };
           setScenarios([seedScenario]);
-          return seedScenario.id; // Return active ID for controller
+          return seedScenario.id; 
       } else {
+          // Cargamos escenarios "ligeros" (sin calculatedData) para listar
           const loadedScenarios: Scenario[] = migratedHistory.map(h => ({
               id: h.scenarioId,
               name: h.name || 'Escenario Recuperado',
@@ -79,11 +84,11 @@ export const useScenarioData = () => {
               calculatedData: []
           }));
           setScenarios(loadedScenarios);
-          return null; // Controller decides active ID
+          return null; 
       }
     } catch (error) {
-      console.error("Error initializing:", error);
-      throw error;
+      console.error("Error en data layer:", error);
+      throw error; // Re-lanzar para que el Manager notifique
     } finally {
       setIsLoading(false);
     }
@@ -94,10 +99,10 @@ export const useScenarioData = () => {
     baseParams: ScenarioParams, 
     baseCoefficients: CoefficientRow[],
     baseScenarioId: string | null
-  ) => {
+  ): string => {
     const newId = generateId();
     
-    // Deep copy params to avoid reference issues
+    // Deep copy de params para evitar referencias
     const newParams: ScenarioParams = {
         ...baseParams,
         promoSeasons: baseParams.promoSeasons.map(s => ({...s, id: `promo-${generateId()}`})),
@@ -114,7 +119,7 @@ export const useScenarioData = () => {
       status: ScenarioStatus.DRAFT,
       createdAt: new Date().toISOString(),
       params: newParams,
-      coefficients: baseCoefficients.map(c => ({...c})), // Deep copy
+      coefficients: baseCoefficients.map(c => ({...c})),
       calculatedData: [] 
     };
 
@@ -147,7 +152,11 @@ export const useScenarioData = () => {
     setScenarios(prev => prev.filter(s => s.id !== id));
   }, []);
 
-  const syncScenarioToDb = useCallback(async (scenario: Scenario) => {
+  /**
+   * Guarda en DB y actualiza historial local.
+   * Retorna true si éxito, false si fallo.
+   */
+  const syncScenarioToDb = useCallback(async (scenario: Scenario): Promise<boolean> => {
     try {
         setLoadingMessage('Guardando en base de datos...');
         const success = await BackendService.saveScenario(scenario);

@@ -29,7 +29,7 @@ export const useScenarioManager = () => {
     syncScenarioToDb
   } = useScenarioData();
 
-  const { notify, removeToast, toasts } = useToast();
+  const { notify } = useToast();
 
   // --- UI STATE ---
   const [selectedCategory, setSelectedCategory] = useState<ScenarioCategory>('LIFT');
@@ -43,16 +43,17 @@ export const useScenarioManager = () => {
         if (seedId) {
             setActiveScenarioId(seedId);
         } else {
-            // Restore selection based on category
+            // Restore selection
             const initial = scenarios.find(s => (s.category || 'LIFT') === selectedCategory);
             if (initial) setActiveScenarioId(initial.id);
             else if (scenarios.length > 0) setActiveScenarioId(scenarios[0].id);
             
-            notify("Histórico cargado correctamente", "success");
+            notify("Sistema sincronizado correctamente", "success");
         }
       })
-      .catch(() => notify("Error de conexión. Modo offline.", "error"));
-  }, []); // Run once
+      .catch(() => notify("Error de conexión. Trabajando en modo local/offline.", "error"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
 
   // --- COMPUTED: Filter Scenarios ---
   const filteredScenarios = useMemo(() => {
@@ -72,9 +73,9 @@ export const useScenarioManager = () => {
         const firstInCat = scenarios.find(s => (s.category || 'LIFT') === selectedCategory);
         setActiveScenarioId(firstInCat ? firstInCat.id : '');
     }
-  }, [selectedCategory, scenarios]); // removed activeScenarioRaw to avoid loop, handled by derived state
+  }, [selectedCategory, scenarios]); 
 
-  // PERFORMANCE OPTIMIZATION: Deferred Calculation
+  // PERFORMANCE: Deferred Calculation
   const deferredParams = useDeferredValue(activeScenarioRaw?.params);
   const deferredCoefficients = useDeferredValue(activeScenarioRaw?.coefficients);
   const deferredCategory = useDeferredValue(activeScenarioRaw?.category);
@@ -104,7 +105,7 @@ export const useScenarioManager = () => {
   const createScenario = () => {
     const existingDraft = filteredScenarios.find(s => s.status === ScenarioStatus.DRAFT);
     if (existingDraft) {
-      notify(`Ya existe un borrador activo en ${selectedCategory}.`, "warning");
+      notify(`Ya tienes un borrador activo en ${selectedCategory}. Complétalo primero.`, "warning");
       setActiveScenarioId(existingDraft.id);
       return;
     }
@@ -120,7 +121,6 @@ export const useScenarioManager = () => {
         newBaseRate = baseRow ? baseRow.adultRegularVisual : baseScenario.params.baseRateAdult1Day;
     }
 
-    // Initialize Rental Prices if needed
     const initialRentalPrices: Record<string, number> = {};
     if (selectedCategory !== 'LIFT') {
         const items = getItemsByCategory(selectedCategory);
@@ -135,23 +135,21 @@ export const useScenarioManager = () => {
         rentalBasePrices: initialRentalPrices,
         validFrom: baseScenario?.params.validFrom || INITIAL_PARAMS.validFrom,
         validTo: baseScenario?.params.validTo || INITIAL_PARAMS.validTo,
-        // Seasons are handled in useScenarioData via deep copy, but we pass overrides if needed
     };
 
     const baseCoefs = baseScenario ? baseScenario.coefficients : defaultCoefficients;
 
-    // Delegate creation to Data Hook
+    // Call Data Layer
     const newId = createLocalDraft(selectedCategory, newParams, baseCoefs, baseScenario?.id || null);
     
     setActiveScenarioId(newId);
     setActiveTab('params');
-    notify(`Nuevo borrador de ${selectedCategory} creado.`, "info");
+    notify(`Borrador creado para ${selectedCategory}.`, "info");
   };
 
   const duplicateScenario = () => {
     if (!activeScenario) return;
     
-    // Duplicate logic is essentially creating a draft from current params
     const newId = createLocalDraft(
         activeScenario.category || 'LIFT',
         activeScenario.params,
@@ -159,11 +157,10 @@ export const useScenarioManager = () => {
         activeScenario.id
     );
     
-    // Set custom name for copy
     updateLocalScenarioMeta(newId, { name: `${activeScenario.name} (Copia)` });
     
     setActiveScenarioId(newId);
-    notify("Escenario duplicado (Local).", "success");
+    notify("Escenario duplicado correctamente.", "success");
   };
 
   const renameScenario = (name: string) => {
@@ -179,14 +176,13 @@ export const useScenarioManager = () => {
   const discardDraft = () => {
     if (!activeScenario || activeScenario.status !== ScenarioStatus.DRAFT) return;
 
-    if (window.confirm("¿Cancelar la creación de este tarifario? Se perderán los cambios.")) {
+    if (window.confirm("¿Estás seguro? Se perderán todos los cambios del borrador.")) {
         discardLocalDraft(activeScenarioId);
         
-        // Fallback selection
         const fallback = filteredScenarios.find(s => s.id !== activeScenarioId);
         setActiveScenarioId(fallback ? fallback.id : '');
         
-        notify("Borrador cancelado.", "info");
+        notify("Borrador eliminado.", "info");
     }
   };
 
@@ -194,68 +190,59 @@ export const useScenarioManager = () => {
     if (!activeScenario || activeScenario.status !== ScenarioStatus.DRAFT) return;
     
     if (!activeScenario.name || activeScenario.name.trim() === "") {
-        notify("Error: El tarifario debe tener un NOMBRE.", "warning");
+        notify("Debes asignar un Nombre al tarifario.", "warning");
         return;
     }
     if (!activeScenario.season || activeScenario.season === 0) {
-        notify("Error: Debes ingresar un AÑO (Temporada) válido.", "warning");
+        notify("Debes asignar una Temporada (Año).", "warning");
         return;
     }
 
-    if (!window.confirm(`¿Confirmar cierre de tarifario "${activeScenario.name}"?\n\nAl confirmar, los datos se guardarán en la BASE DE DATOS.`)) return;
+    if (!window.confirm(`¿Cerrar y Publicar "${activeScenario.name}"?\n\nEsta acción es irreversible.`)) return;
 
     // Prepare fully calculated scenario for DB
     const scenarioToSave = {
         ...activeScenario,
         status: ScenarioStatus.CLOSED,
         closedAt: new Date().toISOString()
-        // calculatedData is already inside activeScenario from useMemo
     };
 
+    // Call Data Layer
     const success = await syncScenarioToDb(scenarioToSave);
 
     if (success) {
         setActiveTab('history');
-        notify("Escenario guardado exitosamente en DB.", "success");
+        notify("¡Tarifario publicado exitosamente!", "success");
     } else {
-        notify("Error al guardar en base de datos.", "error");
+        notify("Error crítico al guardar en base de datos.", "error");
     }
   };
 
-  // Wrapper for Params Update
   const updateParams = (newParams: Partial<typeof INITIAL_PARAMS>) => {
       if (!activeScenarioRaw || activeScenarioRaw.status === ScenarioStatus.CLOSED) return;
       updateLocalScenarioParams(activeScenarioId, newParams);
   };
 
-  // Wrapper for Coef Update
   const updateCoefficient = (day: number, value: number) => {
       if (!activeScenarioRaw || activeScenarioRaw.status === ScenarioStatus.CLOSED) return;
       updateLocalScenarioCoefficients(activeScenarioId, day, value);
   };
 
   return {
-    // Data (Read-Only UI)
     scenarios,
     filteredScenarios,
     history,
-    
-    // UI State
     selectedCategory,
     activeScenarioId, 
     activeScenario, 
     isLoading, 
     loadingMessage, 
     activeTab, 
-    toasts,
     
-    // UI Setters
     setSelectedCategory,
     setActiveTab, 
     setActiveScenarioId, 
-    removeToast, 
     
-    // Actions
     createScenario, 
     duplicateScenario, 
     renameScenario,

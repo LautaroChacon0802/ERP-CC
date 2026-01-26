@@ -1,6 +1,5 @@
-// CAMBIO: Importamos la instancia 'supabase' ya inicializada, no 'createClient'
 import { supabase } from '../lib/supabase'; 
-import { Scenario, ScenarioParams, ScenarioStatus, ScenarioType } from '../types';
+import { Scenario, ScenarioParams, ScenarioStatus, ScenarioType, CoefficientRow } from '../types';
 
 // =============================================================================
 // SEGURIDAD: VALIDACIONES DE ESTADO
@@ -21,7 +20,7 @@ const ensureScenarioIsEditable = async (scenarioId: string): Promise<void> => {
 };
 
 // =============================================================================
-// API METHODS
+// API METHODS (Individuales)
 // =============================================================================
 
 export const fetchScenarios = async (): Promise<Scenario[]> => {
@@ -40,10 +39,12 @@ export const fetchScenarios = async (): Promise<Scenario[]> => {
   }));
 };
 
-export const createScenario = async (scenario: Omit<Scenario, 'id' | 'createdAt'>): Promise<Scenario> => {
+export const createScenario = async (scenario: Omit<Scenario, 'createdAt'>): Promise<Scenario> => {
+  // Nota: Omitimos 'createdAt' porque Supabase puede manejarlo, o lo pasamos si queremos forzarlo.
   const { data, error } = await supabase
     .from('scenarios')
     .insert([{
+      id: scenario.id, // Permitimos pasar ID generado en cliente si es necesario
       name: scenario.name,
       season: scenario.season,
       type: scenario.type,
@@ -52,7 +53,8 @@ export const createScenario = async (scenario: Omit<Scenario, 'id' | 'createdAt'
       base_scenario_id: scenario.baseScenarioId,
       params: scenario.params,
       coefficients: scenario.coefficients,
-      calculated_data: scenario.calculatedData
+      calculated_data: scenario.calculatedData,
+      closed_at: scenario.closedAt
     }])
     .select()
     .single();
@@ -67,7 +69,6 @@ export const createScenario = async (scenario: Omit<Scenario, 'id' | 'createdAt'
 };
 
 export const updateScenario = async (scenario: Scenario): Promise<void> => {
-  // Validación de seguridad antes de escribir
   const { data: currentDbState } = await supabase
     .from('scenarios')
     .select('status, type')
@@ -102,7 +103,6 @@ export const updateScenario = async (scenario: Scenario): Promise<void> => {
 
 export const updateScenarioParams = async (id: string, params: ScenarioParams): Promise<void> => {
   await ensureScenarioIsEditable(id);
-
   const { error } = await supabase
     .from('scenarios')
     .update({ params })
@@ -113,11 +113,41 @@ export const updateScenarioParams = async (id: string, params: ScenarioParams): 
 
 export const deleteScenario = async (id: string): Promise<void> => {
   await ensureScenarioIsEditable(id); 
-
   const { error } = await supabase
     .from('scenarios')
     .delete()
     .eq('id', id);
 
   if (error) throw error;
+};
+
+// =============================================================================
+// SERVICE ADAPTER (Compatibilidad para useScenarioData)
+// =============================================================================
+
+export const BackendService = {
+  getHistory: fetchScenarios,
+
+  getDefaultCoefficients: async (): Promise<CoefficientRow[]> => {
+    // Retornamos coeficientes por defecto (1 al 15)
+    return Array.from({ length: 15 }, (_, i) => ({ day: i + 1, value: 0 }));
+  },
+
+  saveScenario: async (scenario: Scenario): Promise<boolean> => {
+    try {
+      // Intentamos verificar si existe para decidir UPDATE o INSERT
+      // (O usamos UPSERT si se prefiere, pero mantenemos lógica separada por seguridad)
+      const { data } = await supabase.from('scenarios').select('id').eq('id', scenario.id).maybeSingle();
+      
+      if (data) {
+        await updateScenario(scenario);
+      } else {
+        await createScenario(scenario);
+      }
+      return true;
+    } catch (error) {
+      console.error("BackendService.saveScenario failed:", error);
+      return false;
+    }
+  }
 };

@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { Toast, ToastType } from '../components/ToastSystem';
+import ToastSystem, { Toast, ToastType } from '../components/ToastSystem';
 
 interface ToastContextType {
-  toasts: Toast[];
   notify: (message: string, type?: ToastType) => void;
   removeToast: (id: number) => void;
 }
@@ -22,8 +21,10 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   return (
-    <ToastContext.Provider value={{ toasts, notify, removeToast }}>
+    <ToastContext.Provider value={{ notify, removeToast }}>
       {children}
+      {/* El sistema de notificaciones vive aquí, global para toda la app */}
+      <ToastSystem toasts={toasts} removeToast={removeToast} />
     </ToastContext.Provider>
   );
 };

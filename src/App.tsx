@@ -1,13 +1,15 @@
-
 import React from 'react';
 import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 import MainLayout from './components/MainLayout';
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <MainLayout />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <MainLayout />
+      </AuthProvider>
+    </ToastProvider>
   );
 };
 

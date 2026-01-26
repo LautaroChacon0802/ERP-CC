@@ -8,7 +8,7 @@ import {
 import { getItemsByCategory } from "./constants";
 
 // ==========================================
-// CONSTANTES INICIALES (NUEVAS)
+// CONSTANTES INICIALES
 // ==========================================
 
 export const INITIAL_COEFFICIENTS: CoefficientRow[] = Array.from({ length: 15 }, (_, i) => ({
@@ -48,12 +48,38 @@ export const truncate4 = (num: number): number => {
 };
 
 // ==========================================
-// VALIDACIONES
+// MIGRACIÓN Y VALIDACIÓN
 // ==========================================
+
+// [FIX] Recuperada función migrateParams necesaria para useScenarioData
+export const migrateParams = (oldParams: any): ScenarioParams => {
+  const p = JSON.parse(JSON.stringify(oldParams));
+
+  // Migración Legacy (Pases)
+  if ('promoStart' in p && 'promoEnd' in p) {
+    p.promoSeasons = [{ id: 'legacy-promo-' + Date.now(), start: p.promoStart, end: p.promoEnd }];
+    delete p.promoStart; delete p.promoEnd;
+  } else if (!p.promoSeasons) {
+    p.promoSeasons = [];
+  }
+
+  if ('regularStart' in p && 'regularEnd' in p) {
+    p.regularSeasons = [{ id: 'legacy-reg-' + Date.now(), start: p.regularStart, end: p.regularEnd }];
+    delete p.regularStart; delete p.regularEnd;
+  } else if (!p.regularSeasons) {
+    p.regularSeasons = [];
+  }
+
+  // Inicializar precios de rental si no existen
+  if (!p.rentalBasePrices) {
+    p.rentalBasePrices = {};
+  }
+
+  return p as ScenarioParams;
+};
 
 export const validateScenarioDates = (params: ScenarioParams): string | null => {
     if (!params.validFrom || !params.validTo) return "Las fechas de Vigencia General deben estar definidas.";
-    // ... resto de validaciones igual ...
     const d = (s: string) => new Date(s + 'T00:00:00').getTime();
     if (d(params.validFrom) > d(params.validTo)) return "Error en Vigencia General: 'Desde' es posterior a 'Hasta'.";
     return null;
@@ -62,37 +88,115 @@ export const validateScenarioDates = (params: ScenarioParams): string | null => 
 // ==========================================
 // LÓGICA DE CÁLCULO
 // ==========================================
-// ... (Mantén tus funciones calculateLiftPrices y calculateRentalPrices aquí) ...
 
 const calculateLiftPrices = (params: ScenarioParams, coefficients: CoefficientRow[]): PricingRow[] => {
-    // ... tu lógica existente de Lift ...
-    // (Simplificado para brevedad, usa el código que ya tenías o pídeme que lo repita si lo perdiste)
-    const { baseRateAdult1Day, increasePercentage } = params;
-    const base = baseRateAdult1Day * (1 + increasePercentage / 100);
-    return coefficients.map(c => ({
-        days: c.day,
-        coefficient: c.value,
-        adultRegularRaw: base * c.day, // Ejemplo simplificado
-        // ... rellenar resto de campos con 0 o cálculo real
-        adultPromoRaw: 0, minorRegularRaw: 0, minorPromoRaw: 0,
-        adultRegularVisual: 0, adultPromoVisual: 0, minorRegularVisual: 0, minorPromoVisual: 0,
-        adultRegularDailySystem: 0, adultPromoDailySystem: 0, minorRegularDailySystem: 0, minorPromoDailySystem: 0
-    }));
+    const { 
+      baseRateAdult1Day, 
+      increasePercentage, 
+      promoDiscountPercentage, 
+      minorDiscountPercentage,
+      roundingValue 
+    } = params;
+    
+    const safeRounding = roundingValue > 0 ? roundingValue : 100;
+    const scenarioBaseRate = baseRateAdult1Day * (1 + (increasePercentage / 100));
+  
+    return coefficients.map(row => {
+      const totalDaysPrice = scenarioBaseRate * row.day; 
+      const discountMultiplier = 1 - (row.value / 100); 
+      const adultRegularRawCalc = totalDaysPrice * discountMultiplier;
+  
+      // Cálculos derivados
+      const adultPromoRaw = adultRegularRawCalc * (1 - (promoDiscountPercentage / 100));
+      const minorRegularRaw = adultRegularRawCalc * (1 - (minorDiscountPercentage / 100));
+      const minorPromoRaw = adultPromoRaw * (1 - (minorDiscountPercentage / 100));
+  
+      // Redondeos Visuales
+      const adultRegularVisual = roundUp(adultRegularRawCalc, safeRounding);
+      const adultPromoVisual = roundUp(adultPromoRaw, safeRounding);
+      
+      // Tope Menor (70% del Adulto)
+      let minorRegularVisual = roundDown(minorRegularRaw, safeRounding);
+      const maxMinorReg = adultRegularVisual * 0.70;
+      if (minorRegularVisual > maxMinorReg) minorRegularVisual = roundDown(maxMinorReg, safeRounding);
+  
+      let minorPromoVisual = roundDown(minorPromoRaw, safeRounding);
+      const maxMinorPromo = adultPromoVisual * 0.70;
+      if (minorPromoVisual > maxMinorPromo) minorPromoVisual = roundDown(maxMinorPromo, safeRounding);
+  
+      return {
+        days: row.day,
+        coefficient: row.value,
+        adultRegularRaw: adultRegularRawCalc,
+        adultPromoRaw,
+        minorRegularRaw,
+        minorPromoRaw,
+        adultRegularVisual,
+        adultPromoVisual,
+        minorRegularVisual,
+        minorPromoVisual,
+        adultRegularDailySystem: truncate4(adultRegularVisual / row.day),
+        adultPromoDailySystem: truncate4(adultPromoVisual / row.day),
+        minorRegularDailySystem: truncate4(minorRegularVisual / row.day),
+        minorPromoDailySystem: truncate4(minorPromoVisual / row.day)
+      };
+    });
 };
 
-const calculateRentalPrices = (params: ScenarioParams, coefficients: CoefficientRow[], category: ScenarioCategory): PricingRow[] => {
-    // ... tu lógica existente de Rental ...
-    return coefficients.map(c => ({
-        days: c.day,
-        coefficient: c.value,
-        adultRegularRaw: 0, adultPromoRaw: 0, minorRegularRaw: 0, minorPromoRaw: 0,
-        adultRegularVisual: 0, adultPromoVisual: 0, minorRegularVisual: 0, minorPromoVisual: 0,
-        adultRegularDailySystem: 0, adultPromoDailySystem: 0, minorRegularDailySystem: 0, minorPromoDailySystem: 0,
-        rentalItems: {}
-    }));
+const calculateRentalPrices = (
+    params: ScenarioParams, 
+    coefficients: CoefficientRow[], 
+    category: ScenarioCategory
+): PricingRow[] => {
+    const { rentalBasePrices, increasePercentage, roundingValue } = params;
+    const items = getItemsByCategory(category);
+    const safeRounding = roundingValue > 0 ? roundingValue : 100;
+    
+    // Regla de Negocio: Rental Ciudad tiene 15% de descuento sobre la base
+    const isCity = category === 'RENTAL_CITY';
+    const cityDiscountFactor = isCity ? 0.85 : 1.0;
+
+    return coefficients.map(row => {
+        const rowItemsCalculated: Record<string, { raw: number, visual: number, dailySystem: number }> = {};
+
+        items.forEach(item => {
+            const storedBase = rentalBasePrices?.[item.id] || 0;
+            const inflatedBase = storedBase * (1 + (increasePercentage / 100));
+            const locationBase = inflatedBase * cityDiscountFactor;
+            const units = row.day;
+            const timeBasePrice = locationBase * units;
+            const discountMultiplier = 1 - (row.value / 100);
+            const finalRaw = timeBasePrice * discountMultiplier;
+            const visualPrice = roundUp(finalRaw, safeRounding);
+            const unitSystem = truncate4(visualPrice / units);
+
+            rowItemsCalculated[item.id] = {
+                raw: finalRaw,
+                visual: visualPrice,
+                dailySystem: unitSystem
+            };
+        });
+
+        return {
+            days: row.day,
+            coefficient: row.value,
+            adultRegularRaw: 0,
+            adultPromoRaw: 0,
+            minorRegularRaw: 0,
+            minorPromoRaw: 0,
+            adultRegularVisual: 0,
+            adultPromoVisual: 0,
+            minorRegularVisual: 0,
+            minorPromoVisual: 0,
+            adultRegularDailySystem: 0,
+            adultPromoDailySystem: 0,
+            minorRegularDailySystem: 0,
+            minorPromoDailySystem: 0,
+            rentalItems: rowItemsCalculated
+        };
+    });
 };
 
-// ESTA ES LA FUNCIÓN QUE BUSCA EL HOOK (RENOMBRADA O ALIAS)
 export const calculateScenarioPrices = (
   params: ScenarioParams,
   coefficients: CoefficientRow[],
@@ -105,12 +209,12 @@ export const calculateScenarioPrices = (
   }
 };
 
-// ALIAS PARA COMPATIBILIDAD (Soluciona el error 'no exported member calculatePricingData')
 export const calculatePricingData = calculateScenarioPrices;
 
 // ==========================================
 // FORMATTERS
 // ==========================================
-export const formatCurrency = (val: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(val);
+
+export const formatCurrency = (val: number) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
 export const formatDecimal = (val: number) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(val);
 export const format4Decimals = (val: number) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(val);
