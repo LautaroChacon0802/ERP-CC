@@ -2,21 +2,39 @@ import React, { useState } from 'react';
 import { useStockManager } from '../../hooks/useStockManager';
 import { Package, MapPin, Plus, Search, Filter, Loader2, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import LocationList from './LocationList';
+import LocationDetail from './LocationDetail';
 
-type InventoryTab = 'CATALOG' | 'LOCATIONS';
+// Tipos de vista extendidos
+type InventoryView = 'CATALOG' | 'LOCATIONS_LIST' | 'LOCATION_DETAIL';
 
 const InventoryModule: React.FC = () => {
   const navigate = useNavigate();
-  const { items, locations, isLoading } = useStockManager();
-  const [activeTab, setActiveTab] = useState<InventoryTab>('CATALOG');
+  const { items, isLoading } = useStockManager();
+  
+  // Estado de navegación interna
+  const [currentView, setCurrentView] = useState<InventoryView>('CATALOG');
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filtrado simple
+  // Filtrado simple para el catálogo
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  // Handlers de Navegación
+  const handleSelectLocation = (id: string) => {
+      setSelectedLocationId(id);
+      setCurrentView('LOCATION_DETAIL');
+  };
+
+  const handleBackToLocations = () => {
+      setSelectedLocationId(null);
+      setCurrentView('LOCATIONS_LIST');
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -37,14 +55,14 @@ const InventoryModule: React.FC = () => {
           
           <div className="flex bg-gray-100 p-1 rounded-lg">
             <button 
-                onClick={() => setActiveTab('CATALOG')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'CATALOG' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setCurrentView('CATALOG')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentView === 'CATALOG' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
                 Catálogo Maestro
             </button>
             <button 
-                onClick={() => setActiveTab('LOCATIONS')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'LOCATIONS' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setCurrentView(selectedLocationId ? 'LOCATION_DETAIL' : 'LOCATIONS_LIST')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentView !== 'CATALOG' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
                 Ubicaciones
             </button>
@@ -54,11 +72,10 @@ const InventoryModule: React.FC = () => {
 
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         
-        {/* VISTA CATÁLOGO */}
-        {activeTab === 'CATALOG' && (
-            <div className="space-y-6">
-                
-                {/* ACTIONS BAR */}
+        {/* VISTA CATÁLOGO (Mantengo código previo, simplificado visualmente aquí) */}
+        {currentView === 'CATALOG' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+                {/* Actions Bar */}
                 <div className="flex flex-col sm:flex-row justify-between gap-4">
                     <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
@@ -80,7 +97,7 @@ const InventoryModule: React.FC = () => {
                     </div>
                 </div>
 
-                {/* TABLE */}
+                {/* Table */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     {isLoading ? (
                         <div className="p-12 text-center text-gray-400 flex flex-col items-center">
@@ -113,7 +130,7 @@ const InventoryModule: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-600">
-                                            {item.is_serialized ? 'Unitario (Serial)' : 'Granel'}
+                                            {item.is_serialized ? 'Unitario' : 'Granel'}
                                         </td>
                                         <td className="px-6 py-4 text-sm font-medium text-gray-700">
                                             {item.min_stock}
@@ -135,40 +152,18 @@ const InventoryModule: React.FC = () => {
             </div>
         )}
 
-        {/* VISTA UBICACIONES */}
-        {activeTab === 'LOCATIONS' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {locations.map(loc => (
-                    <div key={loc.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="bg-indigo-100 p-2 rounded-full text-indigo-600">
-                                <MapPin size={20} />
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-gray-900">{loc.name}</h3>
-                                <p className="text-xs text-gray-500 uppercase">{loc.type}</p>
-                            </div>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                            {loc.capacity_meta && Object.entries(loc.capacity_meta).map(([key, val]) => (
-                                <div key={key} className="flex justify-between border-b border-gray-100 py-1 last:border-0">
-                                    <span className="capitalize">{key}:</span>
-                                    <span className="font-medium">{val}</span>
-                                </div>
-                            ))}
-                        </div>
-                        <button className="w-full mt-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 hover:bg-gray-50">
-                            Ver Stock
-                        </button>
-                    </div>
-                ))}
-                
-                {/* Card Nueva Ubicación */}
-                <button className="border-2 border-dashed border-gray-300 rounded-xl p-6 flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all min-h-[200px]">
-                    <Plus size={32} className="mb-2" />
-                    <span className="font-bold">Nueva Ubicación</span>
-                </button>
+        {/* VISTAS DE UBICACIONES */}
+        {currentView === 'LOCATIONS_LIST' && (
+            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                <LocationList onSelectLocation={handleSelectLocation} />
             </div>
+        )}
+
+        {currentView === 'LOCATION_DETAIL' && selectedLocationId && (
+            <LocationDetail 
+                locationId={selectedLocationId} 
+                onBack={handleBackToLocations} 
+            />
         )}
 
       </main>

@@ -69,7 +69,7 @@ export const InventoryService = {
     return data as InventoryLocation[];
   },
 
-  // --- STOCK (FIXED) ---
+  // --- STOCK ---
 
   fetchStockByLocation: async (locationId: string): Promise<InventoryStock[]> => {
     const { data, error } = await supabase
@@ -85,12 +85,11 @@ export const InventoryService = {
 
     if (error) throw error;
     
-    // FIX: Saneamiento de datos (Array -> Object)
+    // Mapeo seguro para transformar arrays de joins en objetos
     const sanitizedData = data.map((row: any) => ({
       item_id: row.item_id,
       location_id: row.location_id,
       quantity: row.quantity,
-      // Si viene como array (por la relación 1:N detectada por supabase), tomamos el primero
       item: Array.isArray(row.item) ? row.item[0] : row.item,
       location: Array.isArray(row.location) ? row.location[0] : row.location
     }));
@@ -111,7 +110,6 @@ export const InventoryService = {
 
     if (error) throw error;
 
-    // FIX: Saneamiento de datos
     const sanitizedData = data.map((row: any) => ({
       item_id: row.item_id,
       location_id: row.location_id,
@@ -120,5 +118,34 @@ export const InventoryService = {
     }));
 
     return sanitizedData as InventoryStock[];
+  },
+
+  // NUEVO: Actualizar Stock (Delta)
+  updateStock: async (locationId: string, itemId: string, quantityDelta: number): Promise<number> => {
+    // 1. Obtener stock actual para calcular el nuevo valor
+    const { data: current, error: fetchError } = await supabase
+        .from('inventory_stock')
+        .select('quantity')
+        .eq('location_id', locationId)
+        .eq('item_id', itemId)
+        .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
+    const currentQty = current?.quantity || 0;
+    const newQty = Math.max(0, currentQty + quantityDelta); // Evitar negativos
+
+    // 2. Upsert (Insertar o Actualizar)
+    const { error: upsertError } = await supabase
+        .from('inventory_stock')
+        .upsert({
+            item_id: itemId,
+            location_id: locationId,
+            quantity: newQty,
+            updated_at: new Date().toISOString()
+        });
+
+    if (upsertError) throw upsertError;
+    return newQty;
   }
 };
