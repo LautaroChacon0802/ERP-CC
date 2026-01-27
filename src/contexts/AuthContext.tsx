@@ -1,7 +1,8 @@
-import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
-import { User, AuthState, UserRole } from '../types';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import { AuthState, User, UserRole } from '../types';
 
+// Límite de inactividad: 30 minutos (en milisegundos)
 const INACTIVITY_LIMIT = 30 * 60 * 1000;
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -9,8 +10,9 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true); // Inicialmente true para checkear sesión
+  const [loading, setLoading] = useState(true);
 
+  // Helper para obtener el rol desde la DB de forma segura
   const fetchUserRole = async (uid: string): Promise<UserRole> => {
     try {
       const { data, error } = await supabase
@@ -18,6 +20,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .select('role')
         .eq('id', uid)
         .maybeSingle();
+      
       if (error || !data) return 'user';
       return data.role as UserRole;
     } catch {
@@ -25,21 +28,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // --- LOGOUT ROBUSTO ---
+  // --- HARD LOGOUT (BLINDADO) ---
   const logout = useCallback(async () => {
+    // 1. Feedback visual inmediato
+    setLoading(true);
+
     try {
-        await supabase.auth.signOut();
-    } catch (error) {
-        console.error("Error logout:", error);
+        // 2. Intentar cerrar sesión en servidor (Supabase)
+        const { error } = await supabase.auth.signOut();
+        if (error) console.error("Error al cerrar sesión en Supabase:", error);
+    } catch (e) {
+        console.error("Error de red al salir:", e);
     } finally {
-        localStorage.removeItem('castor_user');
+        // 3. LIMPIEZA NUCLEAR (Se ejecuta SIEMPRE)
+        localStorage.removeItem('castor_user'); // Limpieza de persistencia local si existiera
         setUser(null);
         setIsAuthenticated(false);
-        setLoading(false); // FIX: Desbloquear UI
+        
+        // 4. Desbloquear UI (CRÍTICO: Evita que la app quede 'cargando' si hay error)
+        setLoading(false);
+        
+        // 5. Redirección forzada para limpiar memoria
         window.location.href = '/';
     }
   }, []);
 
+  // Control de inactividad
   useEffect(() => {
     if (!user) return;
     let timeoutId: NodeJS.Timeout;
@@ -52,7 +66,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }, INACTIVITY_LIMIT);
     };
 
-    const events = ['mousedown', 'keydown', 'scroll', 'click'];
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'click'];
     events.forEach(e => document.addEventListener(e, resetTimer));
     resetTimer();
 
@@ -62,26 +76,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [user, logout]);
 
+  // Check Session Inicial y Listener de Cambios
   useEffect(() => {
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const role = await fetchUserRole(session.user.id);
-        setUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          name: session.user.user_metadata.full_name || 'Usuario',
-          role: role
-        });
-        setIsAuthenticated(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const role = await fetchUserRole(session.user.id);
+          setUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.user_metadata.full_name || 'Usuario',
+            role: role
+          });
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error("Error inicializando auth:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
+      // Manejo robusto de eventos de sesión
+      if (session) {
+        // Optimización: si el usuario ya está cargado, no hacer nada
         if (user?.id === session.user.id) return;
+
         const role = await fetchUserRole(session.user.id);
         setUser({
           id: session.user.id,
@@ -90,15 +113,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           role: role
         });
         setIsAuthenticated(true);
-      } else if (event === 'SIGNED_OUT') {
+        setLoading(false);
+      } else {
+        // Manejo explícito de SIGNED_OUT o expiración
         setUser(null);
         setIsAuthenticated(false);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = async (email: string, pass: string) => {
     setLoading(true);
@@ -110,6 +135,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setLoading(false);
         throw error;
     }
+    // El onAuthStateChange manejará la actualización del estado user
   };
 
   return (
@@ -121,6 +147,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
   return context;
 };
