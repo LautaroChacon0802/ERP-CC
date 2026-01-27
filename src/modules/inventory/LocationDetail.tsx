@@ -1,30 +1,18 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { InventoryService } from '../../api/inventory';
-import { InventoryStock, StockCategory } from '../../types';
-import { ArrowLeft, Loader2, Plus, Minus, PackagePlus, AlertCircle, ArrowRightLeft, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { InventoryStock } from '../../types';
+import { ArrowLeft, Loader2, PackagePlus, ArrowRightLeft, X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { useStockManager } from '../../hooks/useStockManager';
 import { useStockMovements } from '../../hooks/useStockMovements';
 import { useAuth } from '../../contexts/AuthContext';
 import AddItemToLocationModal from './AddItemToLocationModal';
+import StockTable from './components/StockTable'; 
 
 interface Props {
     locationId: string;
     onBack: () => void;
 }
-
-// Mapeo de íconos por categoría
-const CATEGORY_ICONS: Record<string, string> = {
-    'AMENITIES': '🧴',
-    'VAJILLA': '🍽️',
-    'BLANCOS': '🛏️',
-    'ELECTRO': '🔌',
-    'EQUIPAMIENTO': '🛋️',
-    'LIMPIEZA': '🧹',
-    'SPA': '🧖‍♀️',
-    'GIMNASIO': '🏋️‍♂️',
-    'OTROS': '📦'
-};
 
 const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
     const { notify } = useToast();
@@ -37,10 +25,11 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
     const [locationName, setLocationName] = useState('');
     const [isUpdating, setIsUpdating] = useState<string | null>(null);
 
+    // Modales
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     
-    // Transfer logic states
+    // Estados Transitorios
     const [transferItem, setTransferItem] = useState<any>(null);
     const [transferQty, setTransferQty] = useState(1);
     const [targetLocationId, setTargetLocationId] = useState('');
@@ -67,15 +56,15 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
     }, [loadData]);
 
     const handleUpdateStock = async (itemId: string, delta: number) => {
-        if (!user?.id) {
-            notify("Error de sesión", "error");
-            return;
-        }
+        if (!user?.id) { notify("Sesión inválida", "error"); return; }
         setIsUpdating(itemId);
         try {
+            // Llamada RPC Segura
             const newQty = await InventoryService.adjustStockWithLog(
                 locationId, itemId, delta, user.id, 'Ajuste rápido manual'
             );
+            
+            // Actualización Optimista/Confirmada
             setStock(prev => {
                 const idx = prev.findIndex(s => s.item_id === itemId);
                 if (idx >= 0) {
@@ -98,7 +87,7 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
             await InventoryService.adjustStockWithLog(
                 locationId, itemId, quantity, user.id, 'Alta inicial'
             );
-            notify("Ítem agregado exitosamente", "success");
+            notify("Ítem agregado", "success");
             loadData();
         } catch (error) {
             notify("Error al agregar ítem", "error");
@@ -116,6 +105,7 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
         if (!transferItem || !targetLocationId || transferQty <= 0) return;
         setIsUpdating(transferItem.item_id);
         try {
+            // Llamada RPC de Traslado
             const success = await registerTransfer(
                 transferItem.item_id, locationId, targetLocationId, transferQty, user?.id || ''
             );
@@ -131,23 +121,13 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
         }
     };
 
-    // --- LÓGICA DE AGRUPACIÓN ---
-    const groupedStock = stock.reduce((acc, curr) => {
-        const cat = curr.item?.category || 'OTROS';
-        if (!acc[cat]) acc[cat] = [];
-        acc[cat].push(curr);
-        return acc;
-    }, {} as Record<string, InventoryStock[]>);
-
-    const sortedCategories = Object.keys(groupedStock).sort();
-
     if (isLoading && !stock.length) {
         return <div className="flex justify-center h-96 items-center"><Loader2 className="animate-spin text-gray-400" size={40}/></div>;
     }
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            {/* Header */}
+            {/* Header Actions */}
             <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors">
@@ -166,77 +146,15 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                 </button>
             </div>
 
-            {/* Lista Agrupada */}
-            <div className="space-y-6">
-                {stock.length === 0 ? (
-                    <div className="p-12 text-center text-gray-400 bg-white rounded-xl border border-dashed">
-                        <AlertCircle size={48} className="mx-auto mb-3 opacity-20" />
-                        <p>No hay stock asignado.</p>
-                        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 text-blue-600 underline">Agregar primer ítem</button>
-                    </div>
-                ) : (
-                    sortedCategories.map(cat => (
-                        <div key={cat} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                            {/* Header Categoría */}
-                            <div className="bg-gray-50 px-6 py-3 border-b border-gray-200 flex items-center gap-2">
-                                <span className="text-xl" role="img" aria-label={cat}>{CATEGORY_ICONS[cat] || '📦'}</span>
-                                <h3 className="font-bold text-gray-700 text-sm tracking-wide">{cat}</h3>
-                                <span className="ml-auto text-xs font-medium text-gray-400 bg-white px-2 py-0.5 rounded border border-gray-200">
-                                    {groupedStock[cat].length} ítems
-                                </span>
-                            </div>
+            {/* Componente Tabla Refactorizado */}
+            <StockTable 
+                stock={stock} 
+                onUpdateStock={handleUpdateStock} 
+                onTransfer={openTransferModal}
+                isUpdatingId={isUpdating}
+            />
 
-                            {/* Tabla de Ítems de la Categoría */}
-                            <table className="w-full text-left">
-                                <tbody className="divide-y divide-gray-100">
-                                    {groupedStock[cat].map((item) => (
-                                        <tr key={item.item_id} className="hover:bg-blue-50 transition-colors group">
-                                            <td className="px-6 py-4 w-1/3">
-                                                <div className="font-bold text-gray-900 text-sm">{item.item?.name}</div>
-                                                {item.item?.sku && <div className="text-xs text-gray-400 font-mono">{item.item.sku}</div>}
-                                            </td>
-                                            <td className="px-6 py-4 text-center w-32">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <span className={`text-xl font-bold ${item.quantity < (item.item?.min_stock || 0) ? 'text-red-600' : 'text-gray-800'}`}>
-                                                        {item.quantity}
-                                                    </span>
-                                                    {item.quantity < (item.item?.min_stock || 0) && (
-                                                        <AlertCircle size={14} className="text-red-500" title="Stock bajo" />
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                                    <button 
-                                                        onClick={() => handleUpdateStock(item.item_id, -1)}
-                                                        disabled={isUpdating === item.item_id || item.quantity <= 0}
-                                                        className="p-1.5 rounded-md text-gray-500 hover:bg-red-100 hover:text-red-600 disabled:opacity-30"
-                                                    ><Minus size={18} /></button>
-                                                    <button 
-                                                        onClick={() => handleUpdateStock(item.item_id, 1)}
-                                                        disabled={isUpdating === item.item_id}
-                                                        className="p-1.5 rounded-md text-gray-500 hover:bg-green-100 hover:text-green-600 disabled:opacity-30"
-                                                    ><Plus size={18} /></button>
-                                                    <div className="w-px h-4 bg-gray-300 mx-2"></div>
-                                                    <button 
-                                                        onClick={() => openTransferModal(item)}
-                                                        disabled={isUpdating === item.item_id || item.quantity <= 0}
-                                                        className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 text-xs font-bold shadow-sm transition-all"
-                                                    >
-                                                        <ArrowRightLeft size={14} /> Mover
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ))
-                )}
-            </div>
-
-            {/* Modales (se mantienen igual) */}
+            {/* Modal Transferencia */}
             {isTransferModalOpen && transferItem && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
@@ -252,7 +170,7 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                             </div>
                             
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cantidad a Mover</label>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cantidad</label>
                                 <input 
                                     type="number" min="1" max={transferItem.quantity}
                                     value={transferQty}

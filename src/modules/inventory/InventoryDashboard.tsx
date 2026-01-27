@@ -1,23 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { InventoryItem, InventoryLocation } from '../../types';
 import { useStockMovements } from '../../hooks/useStockMovements';
+import { InventoryService } from '../../api/inventory';
 import { Package, MapPin, AlertTriangle, Activity, ArrowRight } from 'lucide-react';
 
 interface Props {
-    items: InventoryItem[];
-    locations: InventoryLocation[];
+    // Props opcionales, ahora el dashboard carga sus propias métricas eficientemente
+    items?: InventoryItem[]; 
+    locations?: InventoryLocation[];
     onNavigate: (view: any) => void;
 }
 
-const InventoryDashboard: React.FC<Props> = ({ items, locations, onNavigate }) => {
+const InventoryDashboard: React.FC<Props> = ({ onNavigate }) => {
     const { movements, loadMovements, isLoading: loadingMoves } = useStockMovements();
+    const [metrics, setMetrics] = useState({ totalItems: 0, totalLocations: 0, alertCount: 0 });
     const [recentMoves, setRecentMoves] = useState<any[]>([]);
 
     useEffect(() => {
-        // Cargar movimientos si no están cargados, o refrescar
-        loadMovements().then(() => {
-            // El hook guarda en 'movements', aquí filtramos los últimos 5
-        });
+        // Carga eficiente de métricas (solo counts, sin data pesada)
+        InventoryService.getDashboardMetrics().then(setMetrics);
+        
+        loadMovements().then(() => {});
     }, [loadMovements]);
 
     useEffect(() => {
@@ -25,11 +28,6 @@ const InventoryDashboard: React.FC<Props> = ({ items, locations, onNavigate }) =
             setRecentMoves(movements.slice(0, 5));
         }
     }, [movements]);
-
-    // Cálculo de KPIs
-    const totalItems = items.length;
-    const totalLocations = locations.length;
-    const itemsWithAlerts = items.filter(i => i.min_stock > 0).length;
 
     return (
         <div className="space-y-8 animate-in fade-in duration-300">
@@ -41,7 +39,7 @@ const InventoryDashboard: React.FC<Props> = ({ items, locations, onNavigate }) =
                         <div className="bg-blue-100 p-3 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                             <Package size={24} />
                         </div>
-                        <span className="text-3xl font-black text-gray-800">{totalItems}</span>
+                        <span className="text-3xl font-black text-gray-800">{metrics.totalItems}</span>
                     </div>
                     <h3 className="font-bold text-gray-700">Artículos en Catálogo</h3>
                     <p className="text-sm text-gray-500 mt-1">Total de SKUs registrados</p>
@@ -52,7 +50,7 @@ const InventoryDashboard: React.FC<Props> = ({ items, locations, onNavigate }) =
                         <div className="bg-indigo-100 p-3 rounded-lg text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                             <MapPin size={24} />
                         </div>
-                        <span className="text-3xl font-black text-gray-800">{totalLocations}</span>
+                        <span className="text-3xl font-black text-gray-800">{metrics.totalLocations}</span>
                     </div>
                     <h3 className="font-bold text-gray-700">Ubicaciones Activas</h3>
                     <p className="text-sm text-gray-500 mt-1">Depósitos y puntos de venta</p>
@@ -63,7 +61,7 @@ const InventoryDashboard: React.FC<Props> = ({ items, locations, onNavigate }) =
                         <div className="bg-orange-100 p-3 rounded-lg text-orange-600">
                             <AlertTriangle size={24} />
                         </div>
-                        <span className="text-3xl font-black text-gray-800">{itemsWithAlerts}</span>
+                        <span className="text-3xl font-black text-gray-800">{metrics.alertCount}</span>
                     </div>
                     <h3 className="font-bold text-gray-700">Items con Alertas</h3>
                     <p className="text-sm text-gray-500 mt-1">Configurados con stock mínimo</p>

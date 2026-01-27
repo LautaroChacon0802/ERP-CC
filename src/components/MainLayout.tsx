@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import PricingModule from '../modules/pricing/PricingModule';
 import UserManagement from '../modules/admin/UserManagement';
+import InventoryModule from '../modules/inventory/InventoryModule'; // Import nuevo
 import LoginScreen from './LoginScreen';
 import CastorLogo from './CastorLogo';
 import { DollarSign, Utensils, Box, Users, LogOut } from 'lucide-react';
@@ -16,7 +17,7 @@ const MainLayout: React.FC = () => {
     return <LoginScreen />;
   }
 
-  // --- ROUTING ---
+  // ROUTING
   if (currentModule === 'PRICING') {
     return <PricingModule onBack={() => setCurrentModule(null)} />;
   }
@@ -25,12 +26,17 @@ const MainLayout: React.FC = () => {
     return <UserManagement onBack={() => setCurrentModule(null)} />;
   }
 
-  // --- PERMISOS POR ROL ---
+  // INTEGRACIÓN STOCK
+  if (currentModule === 'STOCK') {
+    return <InventoryModule />; 
+  }
+
   const isAdmin = user.role === 'admin';
   const isPricingManager = user.role === 'pricing_manager';
   
   const canAccessPricing = isAdmin || isPricingManager;
   const canAccessAdmin = isAdmin;
+  const canAccessStock = true; // Habilitado para todos (o roles específicos)
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans">
@@ -90,9 +96,11 @@ const MainLayout: React.FC = () => {
                     <p className="text-sm text-gray-500 mt-2">Control de menús, costos y puntos de venta.</p>
                 </div>
 
-                {/* STOCK CARD (Placeholder) */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col items-center text-center opacity-60 cursor-not-allowed relative overflow-hidden">
-                    <div className="absolute top-3 right-3 bg-gray-100 text-gray-500 text-[10px] font-bold px-2 py-1 rounded">PRÓXIMAMENTE</div>
+                {/* STOCK CARD (DESBLOQUEADA) */}
+                <div 
+                    onClick={() => canAccessStock && setCurrentModule('STOCK')}
+                    className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col items-center text-center transition-all ${canAccessStock ? 'hover:shadow-md hover:border-green-300 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                >
                     <div className="bg-green-100 p-4 rounded-full mb-4">
                         <Box className="h-8 w-8 text-green-600" />
                     </div>
