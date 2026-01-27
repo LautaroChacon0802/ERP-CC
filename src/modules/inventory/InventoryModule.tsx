@@ -1,20 +1,29 @@
 import React, { useState } from 'react';
 import { useStockManager } from '../../hooks/useStockManager';
-import { Package, MapPin, Plus, Search, Filter, Loader2, ArrowLeft, History } from 'lucide-react';
+import { Package, MapPin, Plus, Search, Filter, Loader2, ArrowLeft, History, Edit2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import LocationList from './LocationList';
 import LocationDetail from './LocationDetail';
 import MovementHistory from './MovementHistory';
+import ItemFormModal from './ItemFormModal';
+import { InventoryItem } from '../../types';
+import { InventoryService } from '../../api/inventory';
+import { useToast } from '../../contexts/ToastContext';
 
 type InventoryView = 'CATALOG' | 'LOCATIONS_LIST' | 'LOCATION_DETAIL' | 'HISTORY';
 
 const InventoryModule: React.FC = () => {
   const navigate = useNavigate();
-  const { items, isLoading } = useStockManager();
+  const { items, isLoading, loadCatalog } = useStockManager();
+  const { notify } = useToast();
   
   const [currentView, setCurrentView] = useState<InventoryView>('CATALOG');
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Estados ABM Catálogo
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -30,6 +39,33 @@ const InventoryModule: React.FC = () => {
   const handleBackToLocations = () => {
       setSelectedLocationId(null);
       setCurrentView('LOCATIONS_LIST');
+  };
+
+  // --- LÓGICA ABM ---
+  const handleOpenCreate = () => {
+    setEditingItem(null);
+    setIsItemModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: InventoryItem) => {
+    setEditingItem(item);
+    setIsItemModalOpen(true);
+  };
+
+  const handleSaveItem = async (itemData: Partial<InventoryItem>) => {
+    try {
+      if (editingItem) {
+        await InventoryService.updateItem(editingItem.id, itemData);
+        notify("Producto actualizado correctamente", "success");
+      } else {
+        await InventoryService.createItem(itemData as any);
+        notify("Producto creado correctamente", "success");
+      }
+      await loadCatalog(); // Recargar lista
+    } catch (error) {
+      console.error(error);
+      notify("Error al guardar producto", "error");
+    }
   };
 
   return (
@@ -87,7 +123,13 @@ const InventoryModule: React.FC = () => {
                         />
                     </div>
                     <div className="flex gap-2">
-                        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm">
+                        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50">
+                            <Filter size={18} /> Filtros
+                        </button>
+                        <button 
+                            onClick={handleOpenCreate}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm"
+                        >
                             <Plus size={18} /> Nuevo Producto
                         </button>
                     </div>
@@ -106,6 +148,7 @@ const InventoryModule: React.FC = () => {
                                     <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">SKU</th>
                                     <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Nombre</th>
                                     <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Categoría</th>
+                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Tipo</th>
                                     <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Stock Min</th>
                                     <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Acciones</th>
                                 </tr>
@@ -116,8 +159,16 @@ const InventoryModule: React.FC = () => {
                                         <td className="px-6 py-4 text-sm font-mono text-gray-500">{item.sku || '-'}</td>
                                         <td className="px-6 py-4 font-bold text-gray-900">{item.name}</td>
                                         <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded">{item.category}</span></td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">{item.is_serialized ? 'Unitario' : 'Granel'}</td>
                                         <td className="px-6 py-4 text-sm font-medium text-gray-700">{item.min_stock}</td>
-                                        <td className="px-6 py-4 text-right text-blue-600 hover:text-blue-800 text-sm font-bold cursor-pointer">Editar</td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button 
+                                                onClick={() => handleOpenEdit(item)}
+                                                className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
+                                            >
+                                                <Edit2 size={16} />
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -147,6 +198,13 @@ const InventoryModule: React.FC = () => {
                 <MovementHistory />
             </div>
         )}
+
+        <ItemFormModal 
+            isOpen={isItemModalOpen}
+            onClose={() => setIsItemModalOpen(false)}
+            onSave={handleSaveItem}
+            initialData={editingItem}
+        />
 
       </main>
     </div>

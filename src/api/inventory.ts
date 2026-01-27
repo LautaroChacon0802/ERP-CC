@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { InventoryItem, InventoryLocation, InventoryStock, InventoryMovement } from '../types';
+import { InventoryItem, InventoryLocation, InventoryStock } from '../types';
 
 export const InventoryService = {
   
@@ -145,8 +145,6 @@ export const InventoryService = {
     return newQty;
   },
 
-  // --- MOVIMIENTOS (NUEVO) ---
-
   transferStock: async (
     itemId: string,
     fromLocationId: string,
@@ -155,13 +153,9 @@ export const InventoryService = {
     userId: string
   ): Promise<boolean> => {
     try {
-        // 1. Restar de origen
         await InventoryService.updateStock(fromLocationId, itemId, -quantity);
-        
-        // 2. Sumar a destino
         await InventoryService.updateStock(toLocationId, itemId, quantity);
         
-        // 3. Registrar Movimiento
         const { error } = await supabase.from('inventory_movements').insert({
             item_id: itemId,
             from_location_id: fromLocationId,
@@ -180,7 +174,7 @@ export const InventoryService = {
     }
   },
 
-  getMovements: async (limit = 50): Promise<InventoryMovement[]> => {
+  getMovements: async (limit = 50): Promise<any[]> => {
     const { data, error } = await supabase
       .from('inventory_movements')
       .select(`

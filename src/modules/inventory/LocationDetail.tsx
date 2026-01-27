@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useStockManager } from '../../hooks/useStockManager';
 import { useStockMovements } from '../../hooks/useStockMovements';
 import { useAuth } from '../../contexts/AuthContext';
+import AddItemToLocationModal from './AddItemToLocationModal';
 
 interface Props {
     locationId: string;
@@ -15,7 +16,7 @@ interface Props {
 const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
     const { notify } = useToast();
     const { user } = useAuth();
-    const { locations } = useStockManager(); // Para el select de destino
+    const { locations } = useStockManager();
     const { registerTransfer } = useStockMovements();
 
     const [stock, setStock] = useState<InventoryStock[]>([]);
@@ -23,8 +24,11 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
     const [locationName, setLocationName] = useState('');
     const [isUpdating, setIsUpdating] = useState<string | null>(null);
 
-    // Estado Modal Traslado
+    // Estados Modales
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    
+    // Transfer logic
     const [transferItem, setTransferItem] = useState<any>(null);
     const [transferQty, setTransferQty] = useState(1);
     const [targetLocationId, setTargetLocationId] = useState('');
@@ -70,6 +74,23 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
         }
     };
 
+    const handleAddItem = async (itemId: string, quantity: number) => {
+        try {
+            // Alta directa (IN)
+            await InventoryService.updateStock(locationId, itemId, quantity);
+            
+            // Opcional: Registrar movimiento 'IN' si la API lo requiriera explícitamente, 
+            // pero updateStock ya actualiza la tabla stock. Si quieres trazabilidad IN,
+            // deberías llamar a una API que haga ambas cosas. Por ahora updateStock es funcional.
+            
+            notify("Ítem agregado exitosamente", "success");
+            loadData(); // Recargar para ver el nuevo ítem
+        } catch (error) {
+            console.error(error);
+            notify("Error al agregar ítem", "error");
+        }
+    };
+
     const openTransferModal = (item: any) => {
         setTransferItem(item);
         setTransferQty(1);
@@ -79,11 +100,11 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
 
     const handleTransfer = async () => {
         if (!transferItem || !targetLocationId || transferQty <= 0) {
-            notify("Datos incompletos para el traslado", "warning");
+            notify("Datos incompletos", "warning");
             return;
         }
         if (transferQty > transferItem.quantity) {
-            notify("No hay suficiente stock para trasladar", "error");
+            notify("Stock insuficiente", "error");
             return;
         }
 
@@ -98,11 +119,11 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
             );
 
             if (success) {
-                notify("Traslado registrado exitosamente", "success");
+                notify("Traslado registrado", "success");
                 setIsTransferModalOpen(false);
-                loadData(); // Recargar para ver los cambios
+                loadData();
             } else {
-                notify("Error al registrar traslado", "error");
+                notify("Error al trasladar", "error");
             }
         } catch (e) {
             notify("Error de conexión", "error");
@@ -122,7 +143,6 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300 relative">
-            {/* Header */}
             <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors">
@@ -133,12 +153,14 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                         <p className="text-sm text-gray-500">Control de Existencias</p>
                     </div>
                 </div>
-                <button onClick={() => notify("Próximamente", "info")} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm transition-all">
+                <button 
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-sm transition-all"
+                >
                     <PackagePlus size={18} /> Agregar Ítem
                 </button>
             </div>
 
-            {/* Tabla */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 {stock.length > 0 ? (
                     <table className="w-full text-left">
@@ -197,6 +219,7 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                     <div className="p-12 text-center text-gray-400">
                         <AlertCircle size={48} className="mx-auto mb-3 opacity-20" />
                         <p>No hay stock asignado.</p>
+                        <button onClick={() => setIsAddModalOpen(true)} className="mt-4 text-blue-600 underline">Agregar primer ítem</button>
                     </div>
                 )}
             </div>
@@ -219,9 +242,7 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cantidad a Mover</label>
                                 <input 
-                                    type="number" 
-                                    min="1" 
-                                    max={transferItem.quantity}
+                                    type="number" min="1" max={transferItem.quantity}
                                     value={transferQty}
                                     onChange={(e) => setTransferQty(Math.min(parseInt(e.target.value) || 0, transferItem.quantity))}
                                     className="w-full border-gray-300 rounded-lg p-2 text-lg font-bold"
@@ -245,7 +266,7 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                             <button 
                                 onClick={handleTransfer}
                                 disabled={!targetLocationId || transferQty <= 0}
-                                className="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                                className="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-md"
                             >
                                 Confirmar Traslado
                             </button>
@@ -253,6 +274,13 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                     </div>
                 </div>
             )}
+
+            <AddItemToLocationModal 
+                isOpen={isAddModalOpen}
+                onClose={() => setIsAddModalOpen(false)}
+                onAdd={handleAddItem}
+                locationName={locationName}
+            />
         </div>
     );
 };
