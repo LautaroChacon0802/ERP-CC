@@ -1,24 +1,26 @@
 import React, { useState } from 'react';
 import { useStockManager } from '../../hooks/useStockManager';
-import { Package, MapPin, Plus, Search, Filter, Loader2, ArrowLeft, History, Edit2, Download } from 'lucide-react';
+import { Package, MapPin, Plus, Search, Filter, Loader2, ArrowLeft, History, Edit2, Download, LayoutDashboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import LocationList from './LocationList';
 import LocationDetail from './LocationDetail';
 import MovementHistory from './MovementHistory';
 import ItemFormModal from './ItemFormModal';
+import InventoryDashboard from './InventoryDashboard'; // Import nuevo
 import { InventoryItem } from '../../types';
 import { InventoryService } from '../../api/inventory';
 import { useToast } from '../../contexts/ToastContext';
 import * as XLSX from 'xlsx';
 
-type InventoryView = 'CATALOG' | 'LOCATIONS_LIST' | 'LOCATION_DETAIL' | 'HISTORY';
+type InventoryView = 'DASHBOARD' | 'CATALOG' | 'LOCATIONS_LIST' | 'LOCATION_DETAIL' | 'HISTORY';
 
 const InventoryModule: React.FC = () => {
   const navigate = useNavigate();
-  const { items, isLoading, loadCatalog } = useStockManager();
+  // Pasamos loadCatalog y items al dashboard para evitar refetch innecesario si ya están cargados
+  const { items, locations, isLoading, loadCatalog } = useStockManager();
   const { notify } = useToast();
   
-  const [currentView, setCurrentView] = useState<InventoryView>('CATALOG');
+  const [currentView, setCurrentView] = useState<InventoryView>('DASHBOARD');
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -73,8 +75,6 @@ const InventoryModule: React.FC = () => {
     setIsExporting(true);
     try {
         const fullStock = await InventoryService.fetchAllStock();
-        
-        // Formatear datos para Excel
         const exportData = fullStock.map(s => ({
             "Ubicación": s.location?.name,
             "Tipo": s.location?.type,
@@ -87,16 +87,12 @@ const InventoryModule: React.FC = () => {
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Inventario Total");
-        
-        // Auto-width (simple)
         ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}, {wch: 30}, {wch: 15}, {wch: 10}];
 
         const dateStr = new Date().toISOString().split('T')[0];
         XLSX.writeFile(wb, `Inventario_CC_${dateStr}.xlsx`);
-        
         notify("Reporte generado exitosamente", "success");
     } catch (error) {
-        console.error(error);
         notify("Error al generar reporte", "error");
     } finally {
         setIsExporting(false);
@@ -119,7 +115,13 @@ const InventoryModule: React.FC = () => {
             </div>
           </div>
           
-          <div className="flex bg-gray-100 p-1 rounded-lg">
+          <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto">
+            <button 
+                onClick={() => setCurrentView('DASHBOARD')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${currentView === 'DASHBOARD' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+                <LayoutDashboard size={16} /> Dashboard
+            </button>
             <button 
                 onClick={() => setCurrentView('CATALOG')}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentView === 'CATALOG' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -144,6 +146,14 @@ const InventoryModule: React.FC = () => {
 
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         
+        {currentView === 'DASHBOARD' && (
+            <InventoryDashboard 
+                items={items} 
+                locations={locations} 
+                onNavigate={setCurrentView} 
+            />
+        )}
+
         {currentView === 'CATALOG' && (
             <div className="space-y-6 animate-in fade-in duration-300">
                 <div className="flex flex-col sm:flex-row justify-between gap-4">
@@ -151,16 +161,13 @@ const InventoryModule: React.FC = () => {
                         <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                         <input 
                             type="text" 
-                            placeholder="Buscar por nombre, SKU o categoría..." 
+                            placeholder="Buscar en catálogo..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                     </div>
                     <div className="flex gap-2">
-                        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50">
-                            <Filter size={18} /> Filtros
-                        </button>
                         <button 
                             onClick={handleOpenCreate}
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm"
