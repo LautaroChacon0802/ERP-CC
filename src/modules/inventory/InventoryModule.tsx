@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStockManager } from '../../hooks/useStockManager';
-import { Package, MapPin, Plus, Search, Filter, Loader2, ArrowLeft, History, Edit2 } from 'lucide-react';
+import { Package, MapPin, Plus, Search, Filter, Loader2, ArrowLeft, History, Edit2, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import LocationList from './LocationList';
 import LocationDetail from './LocationDetail';
@@ -9,6 +9,7 @@ import ItemFormModal from './ItemFormModal';
 import { InventoryItem } from '../../types';
 import { InventoryService } from '../../api/inventory';
 import { useToast } from '../../contexts/ToastContext';
+import * as XLSX from 'xlsx';
 
 type InventoryView = 'CATALOG' | 'LOCATIONS_LIST' | 'LOCATION_DETAIL' | 'HISTORY';
 
@@ -24,6 +25,7 @@ const InventoryModule: React.FC = () => {
   // Estados ABM Catálogo
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -41,7 +43,6 @@ const InventoryModule: React.FC = () => {
       setCurrentView('LOCATIONS_LIST');
   };
 
-  // --- LÓGICA ABM ---
   const handleOpenCreate = () => {
     setEditingItem(null);
     setIsItemModalOpen(true);
@@ -61,10 +62,44 @@ const InventoryModule: React.FC = () => {
         await InventoryService.createItem(itemData as any);
         notify("Producto creado correctamente", "success");
       }
-      await loadCatalog(); // Recargar lista
+      await loadCatalog();
     } catch (error) {
       console.error(error);
       notify("Error al guardar producto", "error");
+    }
+  };
+
+  const handleExportStock = async () => {
+    setIsExporting(true);
+    try {
+        const fullStock = await InventoryService.fetchAllStock();
+        
+        // Formatear datos para Excel
+        const exportData = fullStock.map(s => ({
+            "Ubicación": s.location?.name,
+            "Tipo": s.location?.type,
+            "Categoría": s.item?.category,
+            "Ítem": s.item?.name,
+            "SKU": s.item?.sku || '-',
+            "Cantidad": s.quantity
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Inventario Total");
+        
+        // Auto-width (simple)
+        ws['!cols'] = [{wch: 25}, {wch: 15}, {wch: 15}, {wch: 30}, {wch: 15}, {wch: 10}];
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        XLSX.writeFile(wb, `Inventario_CC_${dateStr}.xlsx`);
+        
+        notify("Reporte generado exitosamente", "success");
+    } catch (error) {
+        console.error(error);
+        notify("Error al generar reporte", "error");
+    } finally {
+        setIsExporting(false);
     }
   };
 
@@ -148,7 +183,6 @@ const InventoryModule: React.FC = () => {
                                     <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">SKU</th>
                                     <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Nombre</th>
                                     <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Categoría</th>
-                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Tipo</th>
                                     <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Stock Min</th>
                                     <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Acciones</th>
                                 </tr>
@@ -159,7 +193,6 @@ const InventoryModule: React.FC = () => {
                                         <td className="px-6 py-4 text-sm font-mono text-gray-500">{item.sku || '-'}</td>
                                         <td className="px-6 py-4 font-bold text-gray-900">{item.name}</td>
                                         <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded">{item.category}</span></td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{item.is_serialized ? 'Unitario' : 'Granel'}</td>
                                         <td className="px-6 py-4 text-sm font-medium text-gray-700">{item.min_stock}</td>
                                         <td className="px-6 py-4 text-right">
                                             <button 
@@ -184,7 +217,17 @@ const InventoryModule: React.FC = () => {
         )}
 
         {currentView === 'LOCATIONS_LIST' && (
-            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="flex justify-end">
+                    <button 
+                        onClick={handleExportStock}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-sm disabled:opacity-50"
+                    >
+                        {isExporting ? <Loader2 className="animate-spin" size={18}/> : <Download size={18}/>}
+                        Exportar Inventario Completo
+                    </button>
+                </div>
                 <LocationList onSelectLocation={handleSelectLocation} />
             </div>
         )}

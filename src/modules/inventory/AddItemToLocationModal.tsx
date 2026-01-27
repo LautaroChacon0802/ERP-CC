@@ -26,7 +26,6 @@ const AddItemToLocationModal: React.FC<Props> = ({ isOpen, onClose, onAdd, locat
         .then(setItems)
         .finally(() => setLoadingItems(false));
       
-      // Reset form
       setSelectedItemId('');
       setQuantity(1);
       setSearchTerm('');

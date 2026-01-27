@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { InventoryItem, InventoryLocation, InventoryStock } from '../types';
+import { InventoryItem, InventoryLocation, InventoryStock, InventoryMovement } from '../types';
 
 export const InventoryService = {
   
@@ -69,7 +69,7 @@ export const InventoryService = {
     return data as InventoryLocation[];
   },
 
-  // --- STOCK ---
+  // --- STOCK & MOVEMENTS ---
 
   fetchStockByLocation: async (locationId: string): Promise<InventoryStock[]> => {
     const { data, error } = await supabase
@@ -85,15 +85,36 @@ export const InventoryService = {
 
     if (error) throw error;
     
-    const sanitizedData = data.map((row: any) => ({
+    return data.map((row: any) => ({
       item_id: row.item_id,
       location_id: row.location_id,
       quantity: row.quantity,
       item: Array.isArray(row.item) ? row.item[0] : row.item,
       location: Array.isArray(row.location) ? row.location[0] : row.location
     }));
+  },
 
-    return sanitizedData as InventoryStock[];
+  // Nueva función para exportación masiva
+  fetchAllStock: async (): Promise<InventoryStock[]> => {
+    const { data, error } = await supabase
+      .from('inventory_stock')
+      .select(`
+        quantity,
+        item_id,
+        location_id,
+        item:inventory_items (name, category, sku),
+        location:inventory_locations (name, type)
+      `);
+
+    if (error) throw error;
+
+    return data.map((row: any) => ({
+      item_id: row.item_id,
+      location_id: row.location_id,
+      quantity: row.quantity,
+      item: Array.isArray(row.item) ? row.item[0] : row.item,
+      location: Array.isArray(row.location) ? row.location[0] : row.location
+    }));
   },
 
   fetchStockByItem: async (itemId: string): Promise<InventoryStock[]> => {
@@ -109,16 +130,15 @@ export const InventoryService = {
 
     if (error) throw error;
 
-    const sanitizedData = data.map((row: any) => ({
+    return data.map((row: any) => ({
       item_id: row.item_id,
       location_id: row.location_id,
       quantity: row.quantity,
       location: Array.isArray(row.location) ? row.location[0] : row.location
     }));
-
-    return sanitizedData as InventoryStock[];
   },
 
+  // Operación interna de actualización numérica
   updateStock: async (locationId: string, itemId: string, quantityDelta: number): Promise<number> => {
     const { data: current, error: fetchError } = await supabase
         .from('inventory_stock')
@@ -143,6 +163,50 @@ export const InventoryService = {
 
     if (upsertError) throw upsertError;
     return newQty;
+  },
+
+  // FIX: Función atómica con trazabilidad para ajustes manuales
+  adjustStockWithLog: async (
+    locationId: string, 
+    itemId: string, 
+    quantityDelta: number, 
+    userId: string, 
+    reason: string = 'Ajuste manual'
+  ): Promise<number> => {
+    try {
+        // 1. Actualizar Stock Físico
+        const newQty = await InventoryService.updateStock(locationId, itemId, quantityDelta);
+
+        // 2. Registrar Movimiento
+        const isPositive = quantityDelta > 0;
+        const moveType = 'ADJUST'; // Usamos ADJUST genérico o podríamos usar IN/OUT derivado
+        
+        // Mapeo lógico para historial:
+        // Si entra (IN): to_location = actual, from_location = null
+        // Si sale (OUT): from_location = actual, to_location = null
+        const movementData = {
+            item_id: itemId,
+            to_location_id: isPositive ? locationId : null,
+            from_location_id: !isPositive ? locationId : null,
+            quantity: Math.abs(quantityDelta),
+            type: moveType, 
+            user_id: userId,
+            reason: reason
+        };
+
+        const { error: logError } = await supabase
+            .from('inventory_movements')
+            .insert(movementData);
+
+        if (logError) {
+            console.error("Error logging movement (Stock updated though):", logError);
+            // No hacemos rollback manual aquí por simplicidad, pero idealmente sería una transacción RPC
+        }
+
+        return newQty;
+    } catch (e) {
+        throw e;
+    }
   },
 
   transferStock: async (
@@ -174,7 +238,7 @@ export const InventoryService = {
     }
   },
 
-  getMovements: async (limit = 50): Promise<any[]> => {
+  getMovements: async (limit = 50): Promise<InventoryMovement[]> => {
     const { data, error } = await supabase
       .from('inventory_movements')
       .select(`

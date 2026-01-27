@@ -15,7 +15,7 @@ interface Props {
 
 const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
     const { notify } = useToast();
-    const { user } = useAuth();
+    const { user } = useAuth(); // Necesario para el log
     const { locations } = useStockManager();
     const { registerTransfer } = useStockMovements();
 
@@ -24,11 +24,9 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
     const [locationName, setLocationName] = useState('');
     const [isUpdating, setIsUpdating] = useState<string | null>(null);
 
-    // Estados Modales
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     
-    // Transfer logic
     const [transferItem, setTransferItem] = useState<any>(null);
     const [transferQty, setTransferQty] = useState(1);
     const [targetLocationId, setTargetLocationId] = useState('');
@@ -55,9 +53,22 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
     }, [loadData]);
 
     const handleUpdateStock = async (itemId: string, delta: number) => {
+        if (!user?.id) {
+            notify("Error de sesión: Usuario no identificado", "error");
+            return;
+        }
+
         setIsUpdating(itemId);
         try {
-            const newQty = await InventoryService.updateStock(locationId, itemId, delta);
+            // FIX: Usar adjustStockWithLog para trazabilidad
+            const newQty = await InventoryService.adjustStockWithLog(
+                locationId, 
+                itemId, 
+                delta, 
+                user.id, 
+                'Ajuste rápido manual'
+            );
+
             setStock(prev => {
                 const idx = prev.findIndex(s => s.item_id === itemId);
                 if (idx >= 0) {
@@ -74,17 +85,21 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
         }
     };
 
+    // Callback para el modal de alta inicial
     const handleAddItem = async (itemId: string, quantity: number) => {
+        if (!user?.id) return;
         try {
-            // Alta directa (IN)
-            await InventoryService.updateStock(locationId, itemId, quantity);
-            
-            // Opcional: Registrar movimiento 'IN' si la API lo requiriera explícitamente, 
-            // pero updateStock ya actualiza la tabla stock. Si quieres trazabilidad IN,
-            // deberías llamar a una API que haga ambas cosas. Por ahora updateStock es funcional.
+            // FIX: Usar adjustStockWithLog para alta inicial
+            await InventoryService.adjustStockWithLog(
+                locationId,
+                itemId,
+                quantity, // Cantidad positiva = IN
+                user.id,
+                'Alta inicial en ubicación'
+            );
             
             notify("Ítem agregado exitosamente", "success");
-            loadData(); // Recargar para ver el nuevo ítem
+            loadData();
         } catch (error) {
             console.error(error);
             notify("Error al agregar ítem", "error");
@@ -224,7 +239,7 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                 )}
             </div>
 
-            {/* Modal de Traslado */}
+            {/* Modales */}
             {isTransferModalOpen && transferItem && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95">
@@ -242,7 +257,9 @@ const LocationDetail: React.FC<Props> = ({ locationId, onBack }) => {
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cantidad a Mover</label>
                                 <input 
-                                    type="number" min="1" max={transferItem.quantity}
+                                    type="number" 
+                                    min="1" 
+                                    max={transferItem.quantity}
                                     value={transferQty}
                                     onChange={(e) => setTransferQty(Math.min(parseInt(e.target.value) || 0, transferItem.quantity))}
                                     className="w-full border-gray-300 rounded-lg p-2 text-lg font-bold"
