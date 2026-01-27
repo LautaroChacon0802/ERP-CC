@@ -5,7 +5,8 @@ import { ToastProvider } from './contexts/ToastContext';
 import MainLayout from './components/MainLayout';
 import PricingModule from './modules/pricing/PricingModule';
 import UserManagement from './modules/admin/UserManagement';
-import InventoryModule from './modules/inventory/InventoryModule'; // Nuevo import
+// FIX: Asegurar importación con Mayúscula inicial
+import InventoryModule from './modules/inventory/InventoryModule';
 
 const App: React.FC = () => {
   return (

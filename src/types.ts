@@ -24,7 +24,7 @@ export interface DateRange {
 }
 
 // ==========================================
-// CORE INTERFACES (PRICING ENGINE - NO TOCAR)
+// CORE INTERFACES (PRICING ENGINE)
 // ==========================================
 
 export interface CoefficientRow {
@@ -105,14 +105,27 @@ export interface HistoryLogEntry {
 }
 
 // ==========================================
-// AUTH & USER TYPES (MODIFICADO)
+// RENTAL TYPES (NUEVO)
+// ==========================================
+
+export interface RentalItem {
+  id: string;
+  label: string;
+  category: ScenarioCategory;
+  type: 'SKI' | 'SNOWBOARD' | 'ACCESSORY' | 'OTHER';
+  pricingUnit: 'DAY' | 'HOUR';
+  isFixedDuration: boolean;
+}
+
+// ==========================================
+// AUTH & USER TYPES
 // ==========================================
 
 export interface User {
-  id?: string;
+  id: string;
   email: string;
   name: string;
-  role: UserRole; // Reemplaza a 'permissions'
+  role: UserRole;
 }
 
 export interface AuthState {
@@ -123,7 +136,6 @@ export interface AuthState {
   loading: boolean;
 }
 
-// Alias de compatibilidad
 export type UserProfile = User;
 
 // ==========================================
@@ -168,7 +180,6 @@ export interface InventoryStock {
   item_id: string;
   location_id: string;
   quantity: number;
-  // Campos join (opcionales para UI)
   item?: InventoryItem;
   location?: InventoryLocation;
 }
