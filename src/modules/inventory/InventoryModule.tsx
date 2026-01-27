@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useStockManager } from '../../hooks/useStockManager';
-import { Package, MapPin, Plus, Search, Filter, Loader2, ArrowLeft, History, Edit2, Download, LayoutDashboard } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+// FIX: Se agregó 'Edit2' a los imports
+import { Package, Plus, Search, Filter, Loader2, ArrowLeft, History, Download, LayoutDashboard, Edit2 } from 'lucide-react';
 import LocationList from './LocationList';
 import LocationDetail from './LocationDetail';
 import MovementHistory from './MovementHistory';
 import ItemFormModal from './ItemFormModal';
-import InventoryDashboard from './InventoryDashboard'; // Import nuevo
+import InventoryDashboard from './InventoryDashboard';
 import { InventoryItem } from '../../types';
 import { InventoryService } from '../../api/inventory';
 import { useToast } from '../../contexts/ToastContext';
@@ -14,9 +14,11 @@ import * as XLSX from 'xlsx';
 
 type InventoryView = 'DASHBOARD' | 'CATALOG' | 'LOCATIONS_LIST' | 'LOCATION_DETAIL' | 'HISTORY';
 
-const InventoryModule: React.FC = () => {
-  const navigate = useNavigate();
-  // Pasamos loadCatalog y items al dashboard para evitar refetch innecesario si ya están cargados
+interface Props {
+    onBack?: () => void;
+}
+
+const InventoryModule: React.FC<Props> = ({ onBack }) => {
   const { items, locations, isLoading, loadCatalog } = useStockManager();
   const { notify } = useToast();
   
@@ -24,7 +26,6 @@ const InventoryModule: React.FC = () => {
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Estados ABM Catálogo
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -104,7 +105,10 @@ const InventoryModule: React.FC = () => {
       <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">
+            <button 
+                onClick={() => onBack ? onBack() : window.location.href = '/'} 
+                className="p-2 hover:bg-gray-100 rounded-full text-gray-500"
+            >
                 <ArrowLeft size={20} />
             </button>
             <div className="flex items-center gap-2">
@@ -147,11 +151,7 @@ const InventoryModule: React.FC = () => {
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         
         {currentView === 'DASHBOARD' && (
-            <InventoryDashboard 
-                items={items} 
-                locations={locations} 
-                onNavigate={setCurrentView} 
-            />
+            <InventoryDashboard items={items} locations={locations} onNavigate={setCurrentView} />
         )}
 
         {currentView === 'CATALOG' && (
@@ -168,10 +168,7 @@ const InventoryModule: React.FC = () => {
                         />
                     </div>
                     <div className="flex gap-2">
-                        <button 
-                            onClick={handleOpenCreate}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm"
-                        >
+                        <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm">
                             <Plus size={18} /> Nuevo Producto
                         </button>
                     </div>
@@ -202,10 +199,7 @@ const InventoryModule: React.FC = () => {
                                         <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded">{item.category}</span></td>
                                         <td className="px-6 py-4 text-sm font-medium text-gray-700">{item.min_stock}</td>
                                         <td className="px-6 py-4 text-right">
-                                            <button 
-                                                onClick={() => handleOpenEdit(item)}
-                                                className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors"
-                                            >
+                                            <button onClick={() => handleOpenEdit(item)} className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors">
                                                 <Edit2 size={16} />
                                             </button>
                                         </td>
@@ -226,11 +220,7 @@ const InventoryModule: React.FC = () => {
         {currentView === 'LOCATIONS_LIST' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="flex justify-end">
-                    <button 
-                        onClick={handleExportStock}
-                        disabled={isExporting}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-sm disabled:opacity-50"
-                    >
+                    <button onClick={handleExportStock} disabled={isExporting} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-sm disabled:opacity-50">
                         {isExporting ? <Loader2 className="animate-spin" size={18}/> : <Download size={18}/>}
                         Exportar Inventario Completo
                     </button>
@@ -249,13 +239,7 @@ const InventoryModule: React.FC = () => {
             </div>
         )}
 
-        <ItemFormModal 
-            isOpen={isItemModalOpen}
-            onClose={() => setIsItemModalOpen(false)}
-            onSave={handleSaveItem}
-            initialData={editingItem}
-        />
-
+        <ItemFormModal isOpen={isItemModalOpen} onClose={() => setIsItemModalOpen(false)} onSave={handleSaveItem} initialData={editingItem} />
       </main>
     </div>
   );

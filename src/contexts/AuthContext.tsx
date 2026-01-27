@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState, useCallback, Rea
 import { supabase } from '../lib/supabase';
 import { AuthState, User, UserRole } from '../types';
 
-// Límite de inactividad: 30 minutos (en milisegundos)
 const INACTIVITY_LIMIT = 30 * 60 * 1000;
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -12,7 +11,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Helper para obtener el rol desde la DB de forma segura
   const fetchUserRole = async (uid: string): Promise<UserRole> => {
     try {
       const { data, error } = await supabase
@@ -28,29 +26,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // --- HARD LOGOUT (BLINDADO) ---
+  // --- HARD LOGOUT (REFIX NUCLEAR) ---
   const logout = useCallback(async () => {
-    // 1. Feedback visual inmediato
     setLoading(true);
+    
+    // 1. Llamar a signOut sin esperar (Fire and forget para no bloquear UI)
+    supabase.auth.signOut().catch(err => console.error("Supabase signOut error:", err));
 
-    try {
-        // 2. Intentar cerrar sesión en servidor (Supabase)
-        const { error } = await supabase.auth.signOut();
-        if (error) console.error("Error al cerrar sesión en Supabase:", error);
-    } catch (e) {
-        console.error("Error de red al salir:", e);
-    } finally {
-        // 3. LIMPIEZA NUCLEAR (Se ejecuta SIEMPRE)
-        localStorage.removeItem('castor_user'); // Limpieza de persistencia local si existiera
-        setUser(null);
-        setIsAuthenticated(false);
-        
-        // 4. Desbloquear UI (CRÍTICO: Evita que la app quede 'cargando' si hay error)
-        setLoading(false);
-        
-        // 5. Redirección forzada para limpiar memoria
-        window.location.href = '/';
-    }
+    // 2. Limpieza inmediata del estado local
+    setUser(null);
+    setIsAuthenticated(false);
+    
+    // 3. Limpieza de persistencia
+    localStorage.removeItem('castor_user');
+    // Intentar limpiar keys de supabase si existen (opcional, por seguridad)
+    Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+            localStorage.removeItem(key);
+        }
+    });
+
+    // 4. Desbloqueo y Redirección
+    setLoading(false);
+    window.location.href = '/';
   }, []);
 
   // Control de inactividad
@@ -76,7 +74,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [user, logout]);
 
-  // Check Session Inicial y Listener de Cambios
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -100,11 +97,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Manejo robusto de eventos de sesión
       if (session) {
-        // Optimización: si el usuario ya está cargado, no hacer nada
         if (user?.id === session.user.id) return;
-
         const role = await fetchUserRole(session.user.id);
         setUser({
           id: session.user.id,
@@ -115,7 +109,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsAuthenticated(true);
         setLoading(false);
       } else {
-        // Manejo explícito de SIGNED_OUT o expiración
         setUser(null);
         setIsAuthenticated(false);
         setLoading(false);
@@ -123,19 +116,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => subscription.unsubscribe();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); 
 
   const login = async (email: string, pass: string) => {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: pass,
-    });
-    if (error) {
-        setLoading(false);
+    try {
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password: pass,
+        });
+        if (error) throw error;
+    } catch (error) {
         throw error;
+    } finally {
+        // FIX: Asegurar desbloqueo de UI tras intento de login
+        setLoading(false);
     }
-    // El onAuthStateChange manejará la actualización del estado user
   };
 
   return (

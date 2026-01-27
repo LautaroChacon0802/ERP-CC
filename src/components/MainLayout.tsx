@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import PricingModule from '../modules/pricing/PricingModule';
 import UserManagement from '../modules/admin/UserManagement';
-import InventoryModule from '../modules/inventory/InventoryModule'; // Import nuevo
+import InventoryModule from '../modules/inventory/InventoryModule';
 import LoginScreen from './LoginScreen';
 import CastorLogo from './CastorLogo';
 import { DollarSign, Utensils, Box, Users, LogOut } from 'lucide-react';
@@ -17,7 +17,6 @@ const MainLayout: React.FC = () => {
     return <LoginScreen />;
   }
 
-  // ROUTING
   if (currentModule === 'PRICING') {
     return <PricingModule onBack={() => setCurrentModule(null)} />;
   }
@@ -26,9 +25,9 @@ const MainLayout: React.FC = () => {
     return <UserManagement onBack={() => setCurrentModule(null)} />;
   }
 
-  // INTEGRACIÓN STOCK
   if (currentModule === 'STOCK') {
-    return <InventoryModule />; 
+    // FIX: Pasar prop onBack para permitir salir del módulo
+    return <InventoryModule onBack={() => setCurrentModule(null)} />; 
   }
 
   const isAdmin = user.role === 'admin';
@@ -36,12 +35,10 @@ const MainLayout: React.FC = () => {
   
   const canAccessPricing = isAdmin || isPricingManager;
   const canAccessAdmin = isAdmin;
-  const canAccessStock = true; // Habilitado para todos (o roles específicos)
+  const canAccessStock = true; 
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans">
-        
-        {/* Top Navigation */}
         <nav className="bg-white shadow-sm border-b border-gray-200">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-16">
@@ -68,13 +65,10 @@ const MainLayout: React.FC = () => {
             </div>
         </nav>
 
-        {/* Dashboard Content */}
         <main className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-8">Módulos Disponibles</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                
-                {/* PRICING CARD */}
                 <div 
                     onClick={() => canAccessPricing && setCurrentModule('PRICING')}
                     className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col items-center text-center transition-all ${canAccessPricing ? 'hover:shadow-md hover:border-blue-300 cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
@@ -86,7 +80,6 @@ const MainLayout: React.FC = () => {
                     <p className="text-sm text-gray-500 mt-2">Gestión de escenarios, coeficientes y generación de matrices.</p>
                 </div>
 
-                {/* GASTRO CARD (Placeholder) */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col items-center text-center opacity-60 cursor-not-allowed relative overflow-hidden">
                     <div className="absolute top-3 right-3 bg-gray-100 text-gray-500 text-[10px] font-bold px-2 py-1 rounded">PRÓXIMAMENTE</div>
                     <div className="bg-orange-100 p-4 rounded-full mb-4">
@@ -96,7 +89,6 @@ const MainLayout: React.FC = () => {
                     <p className="text-sm text-gray-500 mt-2">Control de menús, costos y puntos de venta.</p>
                 </div>
 
-                {/* STOCK CARD (DESBLOQUEADA) */}
                 <div 
                     onClick={() => canAccessStock && setCurrentModule('STOCK')}
                     className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col items-center text-center transition-all ${canAccessStock ? 'hover:shadow-md hover:border-green-300 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
@@ -108,7 +100,6 @@ const MainLayout: React.FC = () => {
                     <p className="text-sm text-gray-500 mt-2">Inventario de insumos, blancos y amenities.</p>
                 </div>
 
-                {/* ADMIN CARD */}
                 {canAccessAdmin && (
                     <div 
                         onClick={() => setCurrentModule('ADMIN')}
@@ -121,7 +112,6 @@ const MainLayout: React.FC = () => {
                         <p className="text-sm text-slate-300 mt-2">Gestión de accesos, roles y contraseñas del sistema.</p>
                     </div>
                 )}
-
             </div>
         </main>
     </div>

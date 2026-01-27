@@ -3,7 +3,7 @@ import { InventoryItem, InventoryLocation, InventoryStock, InventoryMovement } f
 
 export const InventoryService = {
   
-  // --- ITEMS (CATÁLOGO) ---
+  // --- ITEMS ---
   fetchCatalog: async (): Promise<InventoryItem[]> => {
     const { data, error } = await supabase.from('inventory_items').select('*').order('name');
     if (error) throw error;
@@ -41,7 +41,18 @@ export const InventoryService = {
     return data as InventoryLocation[];
   },
 
-  // --- STOCK READS ---
+  // NUEVO: Crear ubicación
+  createLocation: async (name: string, type: 'CABIN' | 'DEPOSIT' | 'COMMON_AREA') => {
+    const { data, error } = await supabase
+        .from('inventory_locations')
+        .insert({ name, type, capacity_meta: {} })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+  },
+
+  // --- STOCK ---
   fetchStockByLocation: async (locationId: string): Promise<InventoryStock[]> => {
     const { data, error } = await supabase
       .from('inventory_stock')
@@ -91,9 +102,6 @@ export const InventoryService = {
     }));
   },
 
-  // --- RPC OPERATIONS (TRANSACCIONALES) ---
-
-  // Reemplazo de lógica cliente por RPC 'adjust_stock'
   adjustStockWithLog: async (
     locationId: string, itemId: string, quantityDelta: number, userId: string, reason: string = 'Ajuste manual'
   ): Promise<number> => {
@@ -106,10 +114,9 @@ export const InventoryService = {
     });
 
     if (error) throw error;
-    return data as number; // Retorna el nuevo stock confirmado por DB
+    return data as number;
   },
 
-  // Reemplazo de lógica cliente por RPC 'transfer_stock'
   transferStock: async (
     itemId: string, fromLocationId: string, toLocationId: string, quantity: number, userId: string
   ): Promise<boolean> => {
@@ -125,14 +132,11 @@ export const InventoryService = {
     return data as boolean;
   },
 
-  // --- LEGACY COMPATIBILITY ---
   updateStock: async (locationId: string, itemId: string, quantityDelta: number): Promise<number> => {
-    console.warn("DEPRECATED: updateStock called. Use adjustStockWithLog for traceability.");
-    // Fallback simple si se llama (aunque ya no debería usarse desde UI)
+    console.warn("DEPRECATED: updateStock called.");
     return 0; 
   },
 
-  // --- DASHBOARD METRICS (OPTIMIZED) ---
   getDashboardMetrics: async () => {
     const [items, locs, alerts] = await Promise.all([
         supabase.from('inventory_items').select('*', { count: 'exact', head: true }),
@@ -147,28 +151,44 @@ export const InventoryService = {
     };
   },
 
-  // --- MOVEMENTS ---
+  // FIX 400: Eliminamos el join directo a profiles que fallaba por falta de FK en PostgREST
   getMovements: async (limit = 50): Promise<InventoryMovement[]> => {
-    const { data, error } = await supabase
+    const { data: movements, error } = await supabase
       .from('inventory_movements')
       .select(`
         *,
         item:inventory_items(name, category),
         from:inventory_locations!from_location_id(name),
-        to:inventory_locations!to_location_id(name),
-        user:profiles(email, full_name)
+        to:inventory_locations!to_location_id(name)
       `)
       .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error) throw error;
 
-    return data.map((row: any) => ({
+    // Recolectar user_ids únicos para hacer fetch manual de profiles
+    const userIds = [...new Set(movements.map((m: any) => m.user_id).filter(Boolean))];
+    let userMap: Record<string, any> = {};
+
+    if (userIds.length > 0) {
+        const { data: users } = await supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .in('id', userIds);
+        
+        if (users) {
+            users.forEach((u: any) => userMap[u.id] = u);
+        }
+    }
+
+    // Mapear resultado final
+    return movements.map((row: any) => ({
       ...row,
       item: Array.isArray(row.item) ? row.item[0] : row.item,
       from: Array.isArray(row.from) ? row.from[0] : row.from,
       to: Array.isArray(row.to) ? row.to[0] : row.to,
-      user: Array.isArray(row.user) ? row.user[0] : row.user,
+      // Asignar objeto user manualmente
+      user: userMap[row.user_id] || { email: 'Usuario desconocido', full_name: 'N/A' },
     }));
   }
 };
