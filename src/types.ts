@@ -125,3 +125,62 @@ export interface AuthState {
 
 // Alias de compatibilidad
 export type UserProfile = User;
+
+// ==========================================
+// MÓDULO DE INVENTARIO (STOCK)
+// ==========================================
+
+export type StockCategory = 
+  | 'AMENITIES' 
+  | 'VAJILLA' 
+  | 'BLANCOS' 
+  | 'ELECTRO' 
+  | 'EQUIPAMIENTO' 
+  | 'LIMPIEZA' 
+  | 'SPA' 
+  | 'GIMNASIO';
+
+export type LocationType = 'CABIN' | 'DEPOSIT' | 'COMMON_AREA';
+
+export type MovementType = 'IN' | 'OUT' | 'MOVE' | 'ADJUST';
+
+export interface InventoryItem {
+  id: string;
+  sku?: string;
+  name: string;
+  category: StockCategory;
+  description?: string;
+  is_serialized: boolean;
+  min_stock: number;
+  image_url?: string;
+  created_at?: string;
+}
+
+export interface InventoryLocation {
+  id: string;
+  name: string;
+  type: LocationType;
+  capacity_meta?: Record<string, any>;
+  created_at?: string;
+}
+
+export interface InventoryStock {
+  item_id: string;
+  location_id: string;
+  quantity: number;
+  // Campos join (opcionales para UI)
+  item?: InventoryItem;
+  location?: InventoryLocation;
+}
+
+export interface InventoryMovement {
+  id: string;
+  created_at: string;
+  item_id: string;
+  from_location_id?: string;
+  to_location_id?: string;
+  quantity: number;
+  type: MovementType;
+  user_id: string;
+  reason?: string;
+}
