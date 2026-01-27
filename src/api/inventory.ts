@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { InventoryItem, InventoryLocation, InventoryStock } from '../types';
+import { InventoryItem, InventoryLocation, InventoryStock, InventoryMovement } from '../types';
 
 export const InventoryService = {
   
@@ -85,7 +85,6 @@ export const InventoryService = {
 
     if (error) throw error;
     
-    // Mapeo seguro para transformar arrays de joins en objetos
     const sanitizedData = data.map((row: any) => ({
       item_id: row.item_id,
       location_id: row.location_id,
@@ -120,9 +119,7 @@ export const InventoryService = {
     return sanitizedData as InventoryStock[];
   },
 
-  // NUEVO: Actualizar Stock (Delta)
   updateStock: async (locationId: string, itemId: string, quantityDelta: number): Promise<number> => {
-    // 1. Obtener stock actual para calcular el nuevo valor
     const { data: current, error: fetchError } = await supabase
         .from('inventory_stock')
         .select('quantity')
@@ -133,9 +130,8 @@ export const InventoryService = {
     if (fetchError) throw fetchError;
 
     const currentQty = current?.quantity || 0;
-    const newQty = Math.max(0, currentQty + quantityDelta); // Evitar negativos
+    const newQty = Math.max(0, currentQty + quantityDelta); 
 
-    // 2. Upsert (Insertar o Actualizar)
     const { error: upsertError } = await supabase
         .from('inventory_stock')
         .upsert({
@@ -147,5 +143,64 @@ export const InventoryService = {
 
     if (upsertError) throw upsertError;
     return newQty;
+  },
+
+  // --- MOVIMIENTOS (NUEVO) ---
+
+  transferStock: async (
+    itemId: string,
+    fromLocationId: string,
+    toLocationId: string,
+    quantity: number,
+    userId: string
+  ): Promise<boolean> => {
+    try {
+        // 1. Restar de origen
+        await InventoryService.updateStock(fromLocationId, itemId, -quantity);
+        
+        // 2. Sumar a destino
+        await InventoryService.updateStock(toLocationId, itemId, quantity);
+        
+        // 3. Registrar Movimiento
+        const { error } = await supabase.from('inventory_movements').insert({
+            item_id: itemId,
+            from_location_id: fromLocationId,
+            to_location_id: toLocationId,
+            quantity: quantity,
+            type: 'MOVE',
+            user_id: userId,
+            reason: 'Traslado interno'
+        });
+
+        if (error) throw error;
+        return true;
+    } catch (e) {
+        console.error("Transaction Error:", e);
+        throw e;
+    }
+  },
+
+  getMovements: async (limit = 50): Promise<InventoryMovement[]> => {
+    const { data, error } = await supabase
+      .from('inventory_movements')
+      .select(`
+        *,
+        item:inventory_items(name, category),
+        from:inventory_locations!from_location_id(name),
+        to:inventory_locations!to_location_id(name),
+        user:profiles(email, full_name)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return data.map((row: any) => ({
+      ...row,
+      item: Array.isArray(row.item) ? row.item[0] : row.item,
+      from: Array.isArray(row.from) ? row.from[0] : row.from,
+      to: Array.isArray(row.to) ? row.to[0] : row.to,
+      user: Array.isArray(row.user) ? row.user[0] : row.user,
+    }));
   }
 };
