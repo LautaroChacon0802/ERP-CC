@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import PricingModule from '../modules/pricing/PricingModule';
-import UserManagement from '../modules/admin/UserManagement';
-import InventoryModule from '../modules/inventory/InventoryModule';
-import LoginScreen from './LoginScreen';
-import Dashboard from './Dashboard';
-import { Sidebar } from './layout/Sidebar';
+import { useAuth } from '../../contexts/AuthContext';
+import Sidebar from './Sidebar';
+import LoginScreen from '../LoginScreen';
 
 type ModuleId = 'dashboard' | 'pricing' | 'gastro' | 'stock' | 'admin';
 
-const MainLayout: React.FC = () => {
+interface AppLayoutProps {
+  children: (props: {
+    activeModule: ModuleId;
+    setActiveModule: (module: ModuleId) => void;
+    sidebarCollapsed: boolean;
+  }) => React.ReactNode;
+}
+
+export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const [activeModule, setActiveModule] = useState<ModuleId>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -18,21 +22,6 @@ const MainLayout: React.FC = () => {
   if (!isAuthenticated || !user) {
     return <LoginScreen />;
   }
-
-  // Render module content
-  const renderContent = () => {
-    switch (activeModule) {
-      case 'pricing':
-        return <PricingModule onBack={() => setActiveModule('dashboard')} />;
-      case 'admin':
-        return <UserManagement onBack={() => setActiveModule('dashboard')} />;
-      case 'stock':
-        return <InventoryModule onBack={() => setActiveModule('dashboard')} />;
-      case 'dashboard':
-      default:
-        return <Dashboard user={user} onNavigate={setActiveModule} />;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -53,10 +42,10 @@ const MainLayout: React.FC = () => {
           ${sidebarCollapsed ? 'ml-16' : 'ml-64'}
         `}
       >
-        {renderContent()}
+        {children({ activeModule, setActiveModule, sidebarCollapsed })}
       </main>
     </div>
   );
 };
 
-export default MainLayout;
+export default AppLayout;

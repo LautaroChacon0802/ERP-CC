@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useStockManager } from '../../hooks/useStockManager';
-// FIX: Se agregó 'Edit2' a los imports
-import { Package, Plus, Search, Filter, Loader2, ArrowLeft, History, Download, LayoutDashboard, Edit2 } from 'lucide-react';
+import { Package, Plus, Search, Loader2, History, Download, LayoutDashboard, Edit2 } from 'lucide-react';
 import LocationList from './LocationList';
 import LocationDetail from './LocationDetail';
 import MovementHistory from './MovementHistory';
@@ -10,6 +9,11 @@ import InventoryDashboard from './InventoryDashboard';
 import { InventoryItem } from '../../types';
 import { InventoryService } from '../../api/inventory';
 import { useToast } from '../../contexts/ToastContext';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Button } from '../../components/ui/Button';
+import { Badge } from '../../components/ui/Badge';
+import { Card } from '../../components/ui/Card';
+import { EmptyState } from '../../components/ui/EmptyState';
 import * as XLSX from 'xlsx';
 
 type InventoryView = 'DASHBOARD' | 'CATALOG' | 'LOCATIONS_LIST' | 'LOCATION_DETAIL' | 'HISTORY';
@@ -77,10 +81,10 @@ const InventoryModule: React.FC<Props> = ({ onBack }) => {
     try {
         const fullStock = await InventoryService.fetchAllStock();
         const exportData = fullStock.map(s => ({
-            "Ubicación": s.location?.name,
+            "Ubicacion": s.location?.name,
             "Tipo": s.location?.type,
-            "Categoría": s.item?.category,
-            "Ítem": s.item?.name,
+            "Categoria": s.item?.category,
+            "Item": s.item?.name,
             "SKU": s.item?.sku || '-',
             "Cantidad": s.quantity
         }));
@@ -100,130 +104,124 @@ const InventoryModule: React.FC<Props> = ({ onBack }) => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button 
-                onClick={() => onBack ? onBack() : window.location.href = '/'} 
-                className="p-2 hover:bg-gray-100 rounded-full text-gray-500"
-            >
-                <ArrowLeft size={20} />
-            </button>
-            <div className="flex items-center gap-2">
-                <div className="bg-blue-100 p-2 rounded-lg text-blue-700">
-                    <Package size={20} />
-                </div>
-                <h1 className="text-xl font-bold text-gray-800">Gestión de Inventario</h1>
-            </div>
-          </div>
-          
-          <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto">
-            <button 
-                onClick={() => setCurrentView('DASHBOARD')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${currentView === 'DASHBOARD' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-                <LayoutDashboard size={16} /> Dashboard
-            </button>
-            <button 
-                onClick={() => setCurrentView('CATALOG')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentView === 'CATALOG' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-                Catálogo
-            </button>
-            <button 
-                onClick={() => setCurrentView(selectedLocationId ? 'LOCATION_DETAIL' : 'LOCATIONS_LIST')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${currentView === 'LOCATIONS_LIST' || currentView === 'LOCATION_DETAIL' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-                Ubicaciones
-            </button>
-            <button 
-                onClick={() => setCurrentView('HISTORY')}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${currentView === 'HISTORY' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-                <History size={16}/> Historial
-            </button>
-          </div>
-        </div>
-      </header>
+  const tabs = [
+    { id: 'DASHBOARD' as const, label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+    { id: 'CATALOG' as const, label: 'Catalogo', icon: null },
+    { id: 'LOCATIONS_LIST' as const, label: 'Ubicaciones', icon: null },
+    { id: 'HISTORY' as const, label: 'Historial', icon: <History size={16} /> },
+  ];
 
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <PageHeader
+        title="Gestion de Inventario"
+        subtitle="Control de stock por ubicacion"
+        icon={<Package size={20} />}
+        onBack={onBack}
+      >
+        {/* Tab Navigation inside header */}
+        <div className="flex bg-muted p-1 rounded-lg">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setCurrentView(tab.id === 'LOCATIONS_LIST' && selectedLocationId ? 'LOCATION_DETAIL' : tab.id)}
+              className={`
+                px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2
+                ${(currentView === tab.id || (tab.id === 'LOCATIONS_LIST' && currentView === 'LOCATION_DETAIL'))
+                  ? 'bg-card text-primary shadow-sm' 
+                  : 'text-muted-foreground hover:text-foreground'}
+              `}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </PageHeader>
+
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         
         {currentView === 'DASHBOARD' && (
             <InventoryDashboard items={items} locations={locations} onNavigate={setCurrentView} />
         )}
 
         {currentView === 'CATALOG' && (
-            <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="space-y-6 animate-fade-in">
                 <div className="flex flex-col sm:flex-row justify-between gap-4">
                     <div className="relative flex-1 max-w-md">
-                        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                        <Search className="absolute left-3 top-2.5 text-muted-foreground" size={18} />
                         <input 
                             type="text" 
-                            placeholder="Buscar en catálogo..." 
+                            placeholder="Buscar en catalogo..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full pl-10 pr-4 py-2 border border-input rounded-lg bg-card text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:border-transparent"
                         />
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={handleOpenCreate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm">
-                            <Plus size={18} /> Nuevo Producto
-                        </button>
-                    </div>
+                    <Button onClick={handleOpenCreate} icon={<Plus size={18} />}>
+                        Nuevo Producto
+                    </Button>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <Card>
                     {isLoading ? (
-                        <div className="p-12 text-center text-gray-400 flex flex-col items-center">
-                            <Loader2 className="animate-spin mb-2" size={32} />
-                            <p>Cargando inventario...</p>
+                        <div className="p-12 text-center flex flex-col items-center">
+                            <Loader2 className="animate-spin mb-2 text-muted-foreground" size={32} />
+                            <p className="text-muted-foreground">Cargando inventario...</p>
                         </div>
                     ) : filteredItems.length > 0 ? (
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50 border-b border-gray-200">
-                                <tr>
-                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">SKU</th>
-                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Nombre</th>
-                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Categoría</th>
-                                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Stock Min</th>
-                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {filteredItems.map(item => (
-                                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 text-sm font-mono text-gray-500">{item.sku || '-'}</td>
-                                        <td className="px-6 py-4 font-bold text-gray-900">{item.name}</td>
-                                        <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded">{item.category}</span></td>
-                                        <td className="px-6 py-4 text-sm font-medium text-gray-700">{item.min_stock}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button onClick={() => handleOpenEdit(item)} className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-full transition-colors">
-                                                <Edit2 size={16} />
-                                            </button>
-                                        </td>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-muted border-b border-border">
+                                    <tr>
+                                        <th className="px-6 py-3 text-xs font-bold text-muted-foreground uppercase">SKU</th>
+                                        <th className="px-6 py-3 text-xs font-bold text-muted-foreground uppercase">Nombre</th>
+                                        <th className="px-6 py-3 text-xs font-bold text-muted-foreground uppercase">Categoria</th>
+                                        <th className="px-6 py-3 text-xs font-bold text-muted-foreground uppercase">Stock Min</th>
+                                        <th className="px-6 py-3 text-right text-xs font-bold text-muted-foreground uppercase">Acciones</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    ) : (
-                        <div className="p-12 text-center text-gray-400">
-                            <Package size={48} className="mx-auto mb-3 opacity-20" />
-                            <p>No se encontraron productos.</p>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    {filteredItems.map((item, idx) => (
+                                        <tr key={item.id} className={`hover:bg-muted/50 transition-colors ${idx % 2 === 1 ? 'bg-muted/30' : ''}`}>
+                                            <td className="px-6 py-4 text-sm font-mono text-muted-foreground">{item.sku || '-'}</td>
+                                            <td className="px-6 py-4 font-semibold text-foreground">{item.name}</td>
+                                            <td className="px-6 py-4"><Badge variant="primary">{item.category}</Badge></td>
+                                            <td className="px-6 py-4 text-sm font-medium text-foreground">{item.min_stock}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button onClick={() => handleOpenEdit(item)} className="text-muted-foreground hover:text-accent p-2 hover:bg-accent/10 rounded-lg transition-colors">
+                                                    <Edit2 size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
+                    ) : (
+                        <EmptyState
+                            icon={<Package size={48} />}
+                            title="No se encontraron productos"
+                            description="Intenta con otro termino de busqueda o crea un nuevo producto."
+                            action={{ label: 'Nuevo Producto', onClick: handleOpenCreate }}
+                        />
                     )}
-                </div>
+                </Card>
             </div>
         )}
 
         {currentView === 'LOCATIONS_LIST' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="space-y-6 animate-slide-in-right">
                 <div className="flex justify-end">
-                    <button onClick={handleExportStock} disabled={isExporting} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-sm disabled:opacity-50">
-                        {isExporting ? <Loader2 className="animate-spin" size={18}/> : <Download size={18}/>}
+                    <Button 
+                        onClick={handleExportStock} 
+                        loading={isExporting}
+                        variant="success"
+                        icon={<Download size={18} />}
+                    >
                         Exportar Inventario Completo
-                    </button>
+                    </Button>
                 </div>
                 <LocationList onSelectLocation={handleSelectLocation} />
             </div>
