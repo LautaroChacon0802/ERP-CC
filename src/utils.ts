@@ -1,16 +1,15 @@
 import { 
   CoefficientRow, 
-  PricingRow, 
-  ScenarioParams, 
-  ScenarioCategory
+  ScenarioParams
 } from "./types";
-import { getItemsByCategory } from "./constants";
+// Importar helpers de redondeo desde el nuevo archivo si son necesarios para formatters locales,
+// o dejarlos aquí solo si son usados por UI directamente. 
+// En este caso, los formatters de abajo son independientes.
 
 // ==========================================
 // CONSTANTES INICIALES
 // ==========================================
 
-// FIX: Lista explícita de días permitidos
 const ALLOWED_DAYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
 
 export const INITIAL_COEFFICIENTS: CoefficientRow[] = ALLOWED_DAYS.map(day => ({
@@ -32,22 +31,10 @@ export const INITIAL_PARAMS: ScenarioParams = {
 };
 
 // ==========================================
-// HELPERS MATEMÁTICOS
+// HELPERS MATEMÁTICOS DE UI (Re-export si se usan en componentes)
 // ==========================================
-
-export const roundUp = (num: number, multiple: number): number => {
-  if (multiple === 0) return Math.ceil(num);
-  return Math.ceil(num / multiple) * multiple;
-};
-
-export const roundDown = (num: number, multiple: number): number => {
-  if (multiple === 0) return Math.floor(num);
-  return Math.floor(num / multiple) * multiple;
-};
-
-export const truncate4 = (num: number): number => {
-  return Math.trunc(num * 10000) / 10000;
-};
+// Nota: La lógica "pesada" se movió a pricingCalculator.ts
+export { roundUp, roundDown, truncate4, calculateScenarioPrices } from './utils/pricingCalculator';
 
 // ==========================================
 // MIGRACIONES
@@ -92,126 +79,6 @@ export const validateScenarioDates = (params: ScenarioParams): string | null => 
 
     return null;
 };
-
-// ==========================================
-// LÓGICA DE CÁLCULO
-// ==========================================
-
-const calculateLiftPrices = (params: ScenarioParams, coefficients: CoefficientRow[]): PricingRow[] => {
-    const { baseRateAdult1Day, increasePercentage, roundingValue, minorDiscountPercentage, promoDiscountPercentage } = params;
-    
-    const baseAdult = baseRateAdult1Day * (1 + increasePercentage / 100);
-
-    return coefficients.map(c => {
-        const rawLineal = baseAdult * c.day;
-        const dayDiscountFactor = 1 - (c.value / 100);
-        const adultRegularRaw = rawLineal * dayDiscountFactor;
-        
-        const adultRegularVisual = roundUp(adultRegularRaw, roundingValue);
-
-        const minorFactor = 1 - (minorDiscountPercentage / 100);
-        let minorRegularRaw = adultRegularVisual * minorFactor;
-        const minorRegularVisual = roundDown(minorRegularRaw, roundingValue);
-
-        const promoFactor = 1 - (promoDiscountPercentage / 100);
-        const adultPromoRaw = adultRegularVisual * promoFactor;
-        const adultPromoVisual = roundUp(adultPromoRaw, roundingValue);
-
-        const minorPromoRaw = minorRegularVisual * promoFactor;
-        const minorPromoVisual = roundDown(minorPromoRaw, roundingValue);
-
-        return {
-            days: c.day,
-            coefficient: c.value,
-            
-            adultRegularRaw,
-            adultPromoRaw,
-            minorRegularRaw,
-            minorPromoRaw,
-            
-            adultRegularVisual,
-            adultPromoVisual,
-            minorRegularVisual,
-            minorPromoVisual,
-            
-            adultRegularDailySystem: c.day > 0 ? adultRegularVisual / c.day : 0,
-            adultPromoDailySystem: c.day > 0 ? adultPromoVisual / c.day : 0,
-            minorRegularDailySystem: c.day > 0 ? minorRegularVisual / c.day : 0,
-            minorPromoDailySystem: c.day > 0 ? minorPromoVisual / c.day : 0
-        };
-    });
-};
-
-const calculateRentalPrices = (
-    params: ScenarioParams, 
-    coefficients: CoefficientRow[], 
-    category: ScenarioCategory
-): PricingRow[] => {
-    const { rentalBasePrices, increasePercentage, roundingValue } = params;
-    
-    // Obtener lista de items para esta categoría
-    const rentalItemsList = getItemsByCategory(category);
-
-    const safeRounding = roundingValue > 0 ? roundingValue : 100;
-
-    return coefficients.map(row => {
-        const rowItemsCalculated: Record<string, { raw: number, visual: number, dailySystem: number }> = {};
-
-        // Iterar sobre los items conocidos
-        rentalItemsList.forEach(item => {
-            // 1. Obtener base (input usuario)
-            const storedBase = rentalBasePrices?.[item.id] || 0;
-            
-            // 2. Aplicar Aumento General
-            const inflatedBase = storedBase * (1 + (increasePercentage / 100));
-            
-            // 3. Lógica Temporal: (Precio * Días) * DescuentoCoeficiente
-            const units = row.day;
-            const timeBasePrice = inflatedBase * units;
-            const discountMultiplier = 1 - (row.value / 100);
-            
-            const finalRaw = timeBasePrice * discountMultiplier;
-            
-            // 4. Redondeo
-            const visualPrice = roundUp(finalRaw, safeRounding);
-            
-            // 5. Valor Diario Sistema (4 decimales)
-            const unitSystem = units > 0 ? truncate4(visualPrice / units) : 0;
-
-            rowItemsCalculated[item.id] = {
-                raw: finalRaw,
-                visual: visualPrice,
-                dailySystem: unitSystem
-            };
-        });
-
-        return {
-            days: row.day,
-            coefficient: row.value,
-            // Los valores de pase quedan en 0 para tarifarios rental
-            adultRegularRaw: 0, adultPromoRaw: 0, minorRegularRaw: 0, minorPromoRaw: 0,
-            adultRegularVisual: 0, adultPromoVisual: 0, minorRegularVisual: 0, minorPromoVisual: 0,
-            adultRegularDailySystem: 0, adultPromoDailySystem: 0, minorRegularDailySystem: 0, minorPromoDailySystem: 0,
-            
-            // AQUÍ LA CLAVE:
-            rentalItems: rowItemsCalculated
-        };
-    });
-};
-
-export const calculateScenarioPrices = (
-  params: ScenarioParams,
-  coefficients: CoefficientRow[],
-  category: ScenarioCategory = 'LIFT'
-): PricingRow[] => {
-  if (category === 'LIFT') {
-      return calculateLiftPrices(params, coefficients);
-  } else {
-      return calculateRentalPrices(params, coefficients, category);
-  }
-};
-
-export const calculatePricingData = calculateScenarioPrices;
 
 // ==========================================
 // FORMATTERS

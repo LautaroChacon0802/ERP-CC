@@ -7,8 +7,9 @@ import {
   INITIAL_PARAMS, 
   getItemsByCategory
 } from '../constants';
-// FIX: Agregamos validateScenarioDates al import
-import { calculateScenarioPrices, validateScenarioDates } from '../utils';
+import { validateScenarioDates } from '../utils';
+// FIX: Importar lógica de cálculo desde el nuevo módulo puro
+import { calculateScenarioPrices } from '../utils/pricingCalculator';
 import { useToast } from '../contexts/ToastContext';
 import { useScenarioData } from './useScenarioData';
 import { TabInfo } from '../components/SheetTabs';
@@ -79,6 +80,7 @@ export const useScenarioManager = () => {
   const deferredCoefficients = useDeferredValue(activeScenarioRaw?.coefficients);
   const deferredCategory = useDeferredValue(activeScenarioRaw?.category);
 
+  // REFACTOR: Usando la nueva pure function para el cálculo
   const activeCalculatedData = useMemo(() => {
     if (!deferredParams || !deferredCoefficients) return [];
     
@@ -194,7 +196,6 @@ export const useScenarioManager = () => {
         return;
     }
 
-    // FIX: Validación de fechas efectiva
     const dateError = validateScenarioDates(activeScenario.params);
     if (dateError) {
         notify(`Error de Fechas: ${dateError}`, "error");
