@@ -1,5 +1,6 @@
 import React from 'react';
 import { useScenarioManager } from '../../hooks/useScenarioManager';
+import { useExport } from '../../hooks/useExport'; //
 import ScenarioHeader from '../../components/ScenarioHeader';
 import SheetTabs from '../../components/SheetTabs';
 import ParametersSheet from '../../components/ParametersSheet';
@@ -7,7 +8,8 @@ import CoefficientsSheet from '../../components/CoefficientsSheet';
 import DataSheet from '../../components/DataSheet';
 import HistorySheet from '../../components/HistorySheet';
 import ComparisonSheet from '../../components/ComparisonSheet';
-import { Loader2, ArrowLeft, Layers } from 'lucide-react';
+import OfficialPdfTemplate from '../../components/OfficialPdfTemplate'; //
+import { Loader2, ArrowLeft, Layers, FileDown, FileImage, FileSpreadsheet } from 'lucide-react';
 import CastorLogo from '../../components/CastorLogo';
 import { SCENARIO_CATEGORIES } from '../../constants';
 
@@ -38,17 +40,47 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
     updateCoefficient
   } = useScenarioManager();
 
+  // 1. Instanciar el hook de exportación
+  const { exportToExcel, exportToPdf, exportToJpeg } = useExport();
+
+  // ID constante para identificar el elemento oculto en el DOM
+  const EXPORT_TEMPLATE_ID = "official-export-template-zone";
+
+  const handleExportPdf = () => {
+    if (activeScenario) {
+      exportToPdf(EXPORT_TEMPLATE_ID, `Tarifario_${activeScenario.name}`);
+    }
+  };
+
+  const handleExportJpeg = () => {
+    if (activeScenario) {
+      exportToJpeg(EXPORT_TEMPLATE_ID, `Tarifario_${activeScenario.name}`);
+    }
+  };
+
+  const handleExportExcel = () => {
+    if (activeScenario) {
+        exportToExcel(activeScenario);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans relative">
       
-      {/* ToastSystem eliminado de aquí, ya está en App.tsx */}
-
       {isLoading && (
         <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 text-castor-red animate-spin mb-4" />
           <p className="text-lg font-semibold text-gray-700">{loadingMessage}</p>
         </div>
       )}
+
+      {/* 2. ZONA DE RENDERIZADO OCULTO (Off-screen) */}
+      {/* Es vital que esto no tenga 'display: none', sino position absolute fuera de vista */}
+      <div style={{ position: 'absolute', left: '-9999px', top: 0, overflow: 'hidden' }}>
+        <div id={EXPORT_TEMPLATE_ID}>
+            {activeScenario && <OfficialPdfTemplate scenario={activeScenario} />}
+        </div>
+      </div>
 
       {/* HEADER PRINCIPAL */}
       <header className="bg-castor-red text-white shadow-lg border-b-4 border-slate-900 z-20">
@@ -112,7 +144,36 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
 
         {activeScenario ? (
           <div className="flex-1 flex flex-col bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-            <SheetTabs activeTab={activeTab} onTabChange={setActiveTab} />
+            
+            {/* 3. BARRA DE HERRAMIENTAS DE EXPORTACIÓN */}
+            <div className="flex items-center justify-between px-4 py-2 bg-slate-100 border-b border-gray-200">
+                <SheetTabs activeTab={activeTab} onTabChange={setActiveTab} />
+                
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase mr-2">Exportar:</span>
+                    <button 
+                        onClick={handleExportExcel}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded hover:bg-green-700 transition-colors shadow-sm"
+                        title="Exportar a Excel"
+                    >
+                        <FileSpreadsheet size={14} /> XLSX
+                    </button>
+                    <button 
+                        onClick={handleExportPdf}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded hover:bg-red-700 transition-colors shadow-sm"
+                        title="Exportar PDF Oficial"
+                    >
+                        <FileDown size={14} /> PDF
+                    </button>
+                    <button 
+                        onClick={handleExportJpeg}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 transition-colors shadow-sm"
+                        title="Exportar Imagen JPG"
+                    >
+                        <FileImage size={14} /> JPG
+                    </button>
+                </div>
+            </div>
             
             <div className="flex-1 overflow-auto bg-gray-50">
               {activeTab === 'params' && (
