@@ -1,9 +1,27 @@
 import { supabase } from '../lib/supabase';
-import { InventoryItem, InventoryLocation, InventoryStock, InventoryMovement } from '../types';
+import { 
+  InventoryItem, 
+  InventoryLocation, 
+  InventoryStock, 
+  InventoryMovement,
+  InventoryStockDBResponse,
+  InventoryMovementDBResponse,
+  DashboardMetrics
+} from '../types';
+
+// Helper de seguridad para normalizar respuestas de Supabase (Objeto vs Array)
+const mapStockResponse = (row: InventoryStockDBResponse): InventoryStock => ({
+  item_id: row.item_id,
+  location_id: row.location_id,
+  quantity: row.quantity,
+  // Normalización: Si es array, toma el primero; si es objeto, úsalo directo.
+  item: Array.isArray(row.item) ? row.item[0] : row.item,
+  location: Array.isArray(row.location) ? row.location[0] : row.location
+});
 
 export const InventoryService = {
   
-  // --- ITEMS ---
+  // --- ITEMS (CATÁLOGO) ---
   fetchCatalog: async (): Promise<InventoryItem[]> => {
     const { data, error } = await supabase.from('inventory_items').select('*').order('name');
     if (error) throw error;
@@ -19,7 +37,7 @@ export const InventoryService = {
   createItem: async (item: Omit<InventoryItem, 'id' | 'created_at'>) => {
     const { data, error } = await supabase.from('inventory_items').insert(item).select().single();
     if (error) throw error;
-    return data;
+    return data as InventoryItem;
   },
 
   updateItem: async (id: string, updates: Partial<InventoryItem>) => {
@@ -41,7 +59,6 @@ export const InventoryService = {
     return data as InventoryLocation[];
   },
 
-  // NUEVO: Crear ubicación
   createLocation: async (name: string, type: 'CABIN' | 'DEPOSIT' | 'COMMON_AREA') => {
     const { data, error } = await supabase
         .from('inventory_locations')
@@ -52,7 +69,7 @@ export const InventoryService = {
     return data;
   },
 
-  // --- STOCK ---
+  // --- STOCK READS (BLINDADOS) ---
   fetchStockByLocation: async (locationId: string): Promise<InventoryStock[]> => {
     const { data, error } = await supabase
       .from('inventory_stock')
@@ -61,13 +78,9 @@ export const InventoryService = {
 
     if (error) throw error;
     
-    return data.map((row: any) => ({
-      item_id: row.item_id,
-      location_id: row.location_id,
-      quantity: row.quantity,
-      item: Array.isArray(row.item) ? row.item[0] : row.item,
-      location: Array.isArray(row.location) ? row.location[0] : row.location
-    }));
+    // Casting seguro a la interfaz de respuesta DB
+    const rawData = data as unknown as InventoryStockDBResponse[];
+    return rawData.map(mapStockResponse);
   },
 
   fetchAllStock: async (): Promise<InventoryStock[]> => {
@@ -77,13 +90,8 @@ export const InventoryService = {
 
     if (error) throw error;
 
-    return data.map((row: any) => ({
-      item_id: row.item_id,
-      location_id: row.location_id,
-      quantity: row.quantity,
-      item: Array.isArray(row.item) ? row.item[0] : row.item,
-      location: Array.isArray(row.location) ? row.location[0] : row.location
-    }));
+    const rawData = data as unknown as InventoryStockDBResponse[];
+    return rawData.map(mapStockResponse);
   },
 
   fetchStockByItem: async (itemId: string): Promise<InventoryStock[]> => {
@@ -94,14 +102,11 @@ export const InventoryService = {
 
     if (error) throw error;
 
-    return data.map((row: any) => ({
-      item_id: row.item_id,
-      location_id: row.location_id,
-      quantity: row.quantity,
-      location: Array.isArray(row.location) ? row.location[0] : row.location
-    }));
+    const rawData = data as unknown as InventoryStockDBResponse[];
+    return rawData.map(mapStockResponse);
   },
 
+  // --- RPC OPERATIONS ---
   adjustStockWithLog: async (
     locationId: string, itemId: string, quantityDelta: number, userId: string, reason: string = 'Ajuste manual'
   ): Promise<number> => {
@@ -114,7 +119,7 @@ export const InventoryService = {
     });
 
     if (error) throw error;
-    return data as number;
+    return data as number; 
   },
 
   transferStock: async (
@@ -133,14 +138,17 @@ export const InventoryService = {
   },
 
   updateStock: async (locationId: string, itemId: string, quantityDelta: number): Promise<number> => {
-    console.warn("DEPRECATED: updateStock called.");
+    console.warn("DEPRECATED: updateStock called. Use adjustStockWithLog.");
     return 0; 
   },
 
-  getDashboardMetrics: async () => {
+  // --- DASHBOARD METRICS (OPTIMIZADO) ---
+  getDashboardMetrics: async (): Promise<DashboardMetrics> => {
+    // Usamos { count: 'exact', head: true } para obtener SOLO el número, sin descargar datos.
     const [items, locs, alerts] = await Promise.all([
         supabase.from('inventory_items').select('*', { count: 'exact', head: true }),
         supabase.from('inventory_locations').select('*', { count: 'exact', head: true }),
+        // Filtro en servidor para alertas
         supabase.from('inventory_items').select('*', { count: 'exact', head: true }).gt('min_stock', 0)
     ]);
 
@@ -151,7 +159,7 @@ export const InventoryService = {
     };
   },
 
-  // FIX 400: Eliminamos el join directo a profiles que fallaba por falta de FK en PostgREST
+  // --- MOVEMENTS (BLINDADO) ---
   getMovements: async (limit = 50): Promise<InventoryMovement[]> => {
     const { data: movements, error } = await supabase
       .from('inventory_movements')
@@ -166,9 +174,9 @@ export const InventoryService = {
 
     if (error) throw error;
 
-    // Recolectar user_ids únicos para hacer fetch manual de profiles
+    // Fetch manual de usuarios para consistencia
     const userIds = [...new Set(movements.map((m: any) => m.user_id).filter(Boolean))];
-    let userMap: Record<string, any> = {};
+    let userMap: Record<string, { email: string; full_name: string }> = {};
 
     if (userIds.length > 0) {
         const { data: users } = await supabase
@@ -181,14 +189,24 @@ export const InventoryService = {
         }
     }
 
-    // Mapear resultado final
-    return movements.map((row: any) => ({
-      ...row,
+    const rawMovements = movements as unknown as InventoryMovementDBResponse[];
+
+    return rawMovements.map((row) => ({
+      id: row.id,
+      created_at: row.created_at,
+      item_id: row.item_id,
+      from_location_id: row.from_location_id,
+      to_location_id: row.to_location_id,
+      quantity: row.quantity,
+      type: row.type,
+      user_id: row.user_id,
+      reason: row.reason,
+      
+      // Mapeo seguro de relaciones
       item: Array.isArray(row.item) ? row.item[0] : row.item,
       from: Array.isArray(row.from) ? row.from[0] : row.from,
       to: Array.isArray(row.to) ? row.to[0] : row.to,
-      // Asignar objeto user manualmente
-      user: userMap[row.user_id] || { email: 'Usuario desconocido', full_name: 'N/A' },
+      user: userMap[row.user_id] || { email: 'Sistema', full_name: 'N/A' }
     }));
   }
 };

@@ -105,7 +105,7 @@ export interface HistoryLogEntry {
 }
 
 // ==========================================
-// RENTAL TYPES (NUEVO)
+// RENTAL TYPES
 // ==========================================
 
 export interface RentalItem {
@@ -194,4 +194,45 @@ export interface InventoryMovement {
   type: MovementType;
   user_id: string;
   reason?: string;
+  // Campos expandidos opcionales
+  item?: InventoryItem;
+  from?: InventoryLocation;
+  to?: InventoryLocation;
+  user?: { email: string; full_name: string };
+}
+
+// --- TIPOS DE BLINDAJE Y DTOs (NUEVOS) ---
+
+// Tipo para mapear respuesta cruda de Supabase (que puede devolver arrays en joins)
+export interface InventoryStockDBResponse {
+  quantity: number;
+  item_id: string;
+  location_id: string;
+  item: InventoryItem | InventoryItem[];
+  location: InventoryLocation | InventoryLocation[];
+}
+
+// Tipo para mapear movimientos crudos antes de procesar
+export interface InventoryMovementDBResponse {
+  id: string;
+  created_at: string;
+  item_id: string;
+  from_location_id?: string;
+  to_location_id?: string;
+  quantity: number;
+  type: MovementType;
+  user_id: string;
+  reason?: string;
+  item: InventoryItem | InventoryItem[];
+  from: InventoryLocation | InventoryLocation[];
+  to: InventoryLocation | InventoryLocation[];
+  // user se maneja separado en la lógica actual de inventory.ts, pero lo definimos por si acaso
+  user?: any; 
+}
+
+// DTO optimizado para el Dashboard
+export interface DashboardMetrics {
+    totalItems: number;
+    totalLocations: number;
+    alertCount: number;
 }

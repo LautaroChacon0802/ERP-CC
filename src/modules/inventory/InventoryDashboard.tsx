@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { InventoryItem, InventoryLocation } from '../../types';
+import { InventoryItem, InventoryLocation, DashboardMetrics } from '../../types';
 import { useStockMovements } from '../../hooks/useStockMovements';
 import { InventoryService } from '../../api/inventory';
 import { Package, MapPin, AlertTriangle, Activity, ArrowRight } from 'lucide-react';
 
 interface Props {
-    // Props opcionales, ahora el dashboard carga sus propias métricas eficientemente
+    // Props opcionales para compatibilidad, pero el dashboard ahora es autónomo en datos
     items?: InventoryItem[]; 
     locations?: InventoryLocation[];
     onNavigate: (view: any) => void;
@@ -13,14 +13,23 @@ interface Props {
 
 const InventoryDashboard: React.FC<Props> = ({ onNavigate }) => {
     const { movements, loadMovements, isLoading: loadingMoves } = useStockMovements();
-    const [metrics, setMetrics] = useState({ totalItems: 0, totalLocations: 0, alertCount: 0 });
+    
+    // Estado local para métricas optimizadas
+    const [metrics, setMetrics] = useState<DashboardMetrics>({ 
+        totalItems: 0, 
+        totalLocations: 0, 
+        alertCount: 0 
+    });
     const [recentMoves, setRecentMoves] = useState<any[]>([]);
 
     useEffect(() => {
-        // Carga eficiente de métricas (solo counts, sin data pesada)
-        InventoryService.getDashboardMetrics().then(setMetrics);
+        // 1. Cargar métricas ligeras (COUNTs)
+        InventoryService.getDashboardMetrics()
+            .then(setMetrics)
+            .catch(err => console.error("Error loading metrics:", err));
         
-        loadMovements().then(() => {});
+        // 2. Cargar últimos movimientos
+        loadMovements();
     }, [loadMovements]);
 
     useEffect(() => {
@@ -34,7 +43,10 @@ const InventoryDashboard: React.FC<Props> = ({ onNavigate }) => {
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                <div onClick={() => onNavigate('CATALOG')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-all group">
+                <div 
+                    onClick={() => onNavigate('CATALOG')} 
+                    className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-all group"
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div className="bg-blue-100 p-3 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                             <Package size={24} />
@@ -45,7 +57,10 @@ const InventoryDashboard: React.FC<Props> = ({ onNavigate }) => {
                     <p className="text-sm text-gray-500 mt-1">Total de SKUs registrados</p>
                 </div>
 
-                <div onClick={() => onNavigate('LOCATIONS_LIST')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-all group">
+                <div 
+                    onClick={() => onNavigate('LOCATIONS_LIST')} 
+                    className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-all group"
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div className="bg-indigo-100 p-3 rounded-lg text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                             <MapPin size={24} />
@@ -85,7 +100,7 @@ const InventoryDashboard: React.FC<Props> = ({ onNavigate }) => {
                 
                 <div className="divide-y divide-gray-100">
                     {loadingMoves && recentMoves.length === 0 ? (
-                        <div className="p-8 text-center text-gray-400">Cargando actividad...</div>
+                        <div className="p-8 text-center text-gray-400 text-sm">Cargando actividad...</div>
                     ) : recentMoves.length > 0 ? (
                         recentMoves.map(mov => (
                             <div key={mov.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
