@@ -10,7 +10,7 @@
     "fix:deps": "rm -rf node_modules package-lock.json && npm install"
   },
   "dependencies": {
-    "@react-pdf/renderer": "3.3.0",
+    "@react-pdf/renderer": "3.4.4",
     "@supabase/supabase-js": "^2.48.0",
     "clsx": "^2.1.0",
     "html2canvas": "1.4.1",
