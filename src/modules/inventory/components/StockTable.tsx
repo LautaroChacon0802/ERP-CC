@@ -58,7 +58,9 @@ const StockTable: React.FC<Props> = ({ stock, onUpdateStock, onTransfer, isUpdat
                                                 {item.quantity}
                                             </span>
                                             {item.quantity < (item.item?.min_stock || 0) && (
-                                                <AlertCircle size={14} className="text-red-500" title="Stock bajo" />
+                                                <span title="Stock bajo" className="flex items-center text-red-500">
+                                                    <AlertCircle size={14} />
+                                                </span>
                                             )}
                                         </div>
                                     </td>
