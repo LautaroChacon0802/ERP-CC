@@ -1,122 +1,128 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Lock, Mail, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import CastorLogo from './CastorLogo';
+import { Lock, Mail, Loader2 } from 'lucide-react';
 
 const LoginScreen: React.FC = () => {
-  const { login, loading } = useAuth();
+  const { login, loading, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // Nuevo estado
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // EFECTO DE REDIRECCIÓN AUTOMÁTICA
+  // Vigila la variable isAuthenticated. En cuanto sea true, redirige.
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError(null);
+    
     try {
       await login(email, password);
+      // No es necesario navegar aquí manualmente, el useEffect lo hará
+      // cuando el estado del contexto cambie.
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
+      setError(err.message || 'Error al iniciar sesión. Verifique sus credenciales.');
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Image Overlay */}
-      <div 
-        className="absolute inset-0 z-0 opacity-20"
-        style={{
-            backgroundImage: 'url("https://www.cerrocastor.com/img/home/home-invierno-2024.jpg")',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            filter: 'blur(4px)'
-        }}
-      />
-
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden z-10 relative">
-        <div className="p-8 pb-6 text-center border-b border-gray-100">
-          <div className="flex justify-center mb-4">
-             <div className="bg-white p-2 rounded-xl shadow-md flex items-center justify-center">
-                <CastorLogo className="h-14 w-auto" />
-             </div>
-          </div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Bienvenido</h2>
-          <p className="text-slate-500 text-sm mt-1">Ingresa tus credenciales para continuar</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-8 pt-6 space-y-6">
-          {error && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r flex items-start gap-3">
-              <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={18} />
-              <p className="text-sm text-red-700 font-medium">{error}</p>
+    <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
+        <div className="flex justify-center mb-6">
+            <div className="h-16 w-auto text-white">
+                <CastorLogo className="h-full w-auto" />
             </div>
-          )}
+        </div>
+        <h2 className="text-center text-3xl font-extrabold text-white">
+          ERP Gestión Integral
+        </h2>
+        <p className="mt-2 text-center text-sm text-slate-400">
+          Inicie sesión para acceder al sistema
+        </p>
+      </div>
 
-          <div className="space-y-4">
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {error && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
+                    <div className="flex">
+                        <div className="ml-3">
+                            <p className="text-sm text-red-700">{error}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Correo Electrónico</label>
-              <div className="relative">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                Correo Electrónico
+              </label>
+              <div className="mt-1 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-slate-400" />
+                  <Mail className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
+                  id="email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
                   required
+                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border"
+                  placeholder="usuario@cerrocastor.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-castor-red focus:border-transparent transition-all"
-                  placeholder="usuario@cerrocastor.com"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Contraseña</label>
-              <div className="relative">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Contraseña
+              </label>
+              <div className="mt-1 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-slate-400" />
+                  <Lock className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
-                  type={showPassword ? 'text' : 'password'} // Cambio dinámico de tipo
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
                   required
+                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-10 py-3 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-castor-red focus:border-transparent transition-all"
-                  placeholder="••••••••"
                 />
-                {/* Botón de Ojo */}
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
-                  title={showPassword ? "Ocultar contraseña" : "Ver contraseña"}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
               </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 disabled:opacity-70 disabled:cursor-not-allowed transition-all"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
-                Ingresando...
-              </>
-            ) : (
-              'Iniciar Sesión'
-            )}
-          </button>
-        </form>
-
-        <div className="px-8 pb-8 text-center">
-            <p className="text-xs text-slate-400">
-                &copy; {new Date().getFullYear()} Cerro Castor. Todos los derechos reservados.
-            </p>
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                    <>
+                        <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
+                        Ingresando...
+                    </>
+                ) : (
+                    'Iniciar Sesión'
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
