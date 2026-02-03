@@ -27,18 +27,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // --- HARD LOGOUT (REFIX NUCLEAR) ---
+  // --- HARD LOGOUT ---
   const logout = useCallback(async () => {
     setLoading(true);
     
-    // 1. Llamar a signOut sin esperar (Fire and forget para no bloquear UI)
     supabase.auth.signOut().catch(err => console.error("Supabase signOut error:", err));
 
-    // 2. Limpieza inmediata del estado local
     setUser(null);
     setIsAuthenticated(false);
     
-    // 3. Limpieza de persistencia
     localStorage.removeItem('castor_user');
     Object.keys(localStorage).forEach(key => {
         if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
@@ -46,7 +43,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     });
 
-    // 4. Desbloqueo y Redirección
     setLoading(false);
     window.location.href = '/';
   }, []);
@@ -74,15 +70,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [user, logout]);
 
-  // --- INICIALIZACIÓN ROBUSTA (FIX LOGIN LOADING) ---
+  // --- INICIALIZACIÓN ROBUSTA (FIX NETWORK TIMEOUT) ---
   useEffect(() => {
     let mounted = true;
 
     const initializeAuth = async () => {
       try {
-        // 1. Race condition safety: Timeout de 3s para liberar UI si Supabase cuelga
+        // 1. Aumentamos el timeout a 8 segundos para conexiones lentas
         const timeOutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Auth timeout')), 3000)
+          setTimeout(() => reject(new Error('Auth timeout')), 8000)
         );
 
         // 2. Intento de obtener sesión
@@ -97,6 +93,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (mounted) {
           if (session) {
+            // Si hay sesión, buscamos el rol
             const role = await fetchUserRole(session.user.id);
             setUser({
               id: session.user.id,
@@ -107,19 +104,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setIsAuthenticated(true);
           } else {
             // Si no hay sesión, limpieza explícita
+            console.log("No active session found during init.");
             setUser(null);
             setIsAuthenticated(false);
           }
         }
       } catch (error) {
         console.warn("Auth init warning (Network or Timeout):", error);
-        // En caso de error o timeout, asumimos logout para dejar al usuario entrar
+        // EN CASO DE ERROR/TIMEOUT: Asumimos logout para permitir intento manual
         if (mounted) {
             setUser(null);
             setIsAuthenticated(false);
+            // No forzamos logout() completo para no limpiar localStorage preventivamente si fue solo error de red
         }
       } finally {
-        // 3. LA CLAVE: Liberar la UI siempre
+        // 3. SIEMPRE liberar la UI
         if (mounted) {
             setLoading(false);
         }
@@ -130,29 +129,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Listener de cambios de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return;
-
-      if (session) {
-        // Si hay sesión, intentamos cargar datos del usuario
-        // Nota: Si ya tenemos el usuario cargado, esto podría optimizarse, 
-        // pero por seguridad volvemos a verificar el rol
-        const role = await fetchUserRole(session.user.id);
-        if (mounted) {
-            setUser({
-              id: session.user.id,
-              email: session.user.email || '',
-              name: session.user.user_metadata.full_name || 'Usuario',
-              role: role
-            });
-            setIsAuthenticated(true);
-            setLoading(false);
+      if (mounted) {
+        if (session) {
+             // Lógica de actualización de usuario al detectar cambio
+             const role = await fetchUserRole(session.user.id);
+             setUser({
+               id: session.user.id,
+               email: session.user.email || '',
+               name: session.user.user_metadata.full_name || 'Usuario',
+               role: role
+             });
+             setIsAuthenticated(true);
+        } else {
+             setUser(null);
+             setIsAuthenticated(false);
         }
-      } else {
-        if (mounted) {
-            setUser(null);
-            setIsAuthenticated(false);
-            setLoading(false);
-        }
+        setLoading(false);
       }
     });
 
@@ -173,7 +165,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
         throw error;
     } finally {
-        // FIX: Asegurar desbloqueo de UI tras intento de login
         setLoading(false);
     }
   };
