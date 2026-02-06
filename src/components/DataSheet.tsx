@@ -1,8 +1,9 @@
 import React from 'react';
 import { Scenario } from '../types';
-import { formatCurrency, formatDecimal, format4Decimals } from '../utils'; // Importar format4Decimals
+import { formatCurrency, formatDecimal, format4Decimals } from '../utils'; 
 import { Download, Table, FileText, Image } from 'lucide-react';
 import { useExport } from '../hooks/useExport';
+import { getItemsByCategory } from '../constants'; // FIX: Importar getter de items
 
 interface DataSheetProps {
   scenario: Scenario;
@@ -17,7 +18,26 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
   const cleanName = (scenario.name || 'tarifario').replace(/[^a-z0-9]/gi, '_');
   const TABLE_ID = "pricing-table-export";
 
+  // Lógica de detección de tipo para renderizado dinámico
+  const category = scenario.category || 'LIFT';
+  const isRental = category !== 'LIFT';
+  const rentalItems = isRental ? getItemsByCategory(category) : [];
+
   const renderHeaders = () => {
+    // CASO RENTAL: Columnas dinámicas por Item
+    if (isRental) {
+        return (
+            <>
+                {rentalItems.map(item => (
+                    <th key={item.id} className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider whitespace-nowrap">
+                        {item.label}
+                    </th>
+                ))}
+            </>
+        );
+    }
+
+    // CASO LIFT (Estático)
     if (viewMode === 'visual') {
       return (
         <>
@@ -50,6 +70,47 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
   };
 
   const renderRows = (row: any) => {
+    // CASO RENTAL: Celdas dinámicas
+    if (isRental) {
+        return (
+            <>
+                {rentalItems.map(item => {
+                    // FIX: Fallback defensivo por seguridad
+                    const itemData = row.rentalItems?.[item.id];
+                    const valVisual = itemData?.visual ?? 0;
+                    const valSystem = itemData?.dailySystem ?? 0;
+                    const valRaw = itemData?.raw ?? 0;
+
+                    // Lógica de visualización por celda
+                    if (viewMode === 'system') {
+                        return (
+                            <td key={item.id} className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">
+                                {format4Decimals(valSystem)}
+                            </td>
+                        );
+                    }
+                    if (viewMode === 'matrix') {
+                         return (
+                            <td key={item.id} className="px-6 py-4 whitespace-nowrap text-sm">
+                                <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400">{formatDecimal(valRaw)}</span>
+                                    <span className="font-bold text-gray-900">{formatCurrency(valVisual)}</span>
+                                </div>
+                            </td>
+                         );
+                    }
+                    // Default: Visual
+                    return (
+                        <td key={item.id} className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                            {formatCurrency(valVisual)}
+                        </td>
+                    );
+                })}
+            </>
+        );
+    }
+
+    // CASO LIFT (Estático)
     if (viewMode === 'visual') {
       return (
         <>
@@ -63,7 +124,6 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
     if (viewMode === 'system') {
       return (
         <>
-          {/* FIX: Usar 4 decimales para TODOS los valores de sistema */}
           <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">{format4Decimals(row.adultRegularDailySystem)}</td>
           <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">{format4Decimals(row.minorRegularDailySystem)}</td>
           <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">{format4Decimals(row.adultPromoDailySystem)}</td>
@@ -125,10 +185,9 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
 
       {/* TABLE WRAPPER (ID para exportación) */}
       <div className="flex-1 overflow-auto bg-white" id={TABLE_ID}>
-        <div className="bg-white p-4"> {/* Padding extra para que el PDF se vea bien */}
+        <div className="bg-white p-4">
             <h2 className="text-xl font-bold mb-4 text-center hidden" id="print-title">{scenario.name} - Temporada {scenario.season}</h2>
             
-            {/* NUEVO: Header de Parámetros en Tabla */}
             <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded flex gap-6 text-sm text-yellow-800">
                 <div className="flex flex-col">
                     <span className="text-xs text-yellow-600 uppercase font-semibold">% Aumento</span>

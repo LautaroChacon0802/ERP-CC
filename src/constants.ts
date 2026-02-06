@@ -43,10 +43,12 @@ export const CATEGORY_ICONS: Record<string, string> = {
 // ==========================================
 
 const COMMON_EQUIPMENT_ITEMS = [
-  { id: 'sb_comp_ad', label: 'Snowboard Completo (Adulto)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
-  { id: 'sb_comp_mn', label: 'Snowboard Completo (Menor)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
-  { id: 'sb_tabla_ad', label: 'Snowboard Solo Tabla (Adulto)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
-  { id: 'sb_tabla_mn', label: 'Snowboard Solo Tabla (Menor)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  // FIX: Etiquetas diferenciadas para evitar confusión
+  { id: 'sb_comp_ad', label: 'Snowboard Comp. (AD)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  { id: 'sb_comp_mn', label: 'Snowboard Comp. (MN)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  { id: 'sb_tabla_ad', label: 'Snowboard Tabla (AD)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  { id: 'sb_tabla_mn', label: 'Snowboard Tabla (MN)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  
   { id: 'ski_jr_comp', label: 'Ski Junior Completo', type: 'SKI', pricingUnit: 'DAY' },
   { id: 'ski_jr_tabla', label: 'Ski Junior Solo Tablas', type: 'SKI', pricingUnit: 'DAY' },
   { id: 'ski_std_comp', label: 'Ski Estandar Completo', type: 'SKI', pricingUnit: 'DAY' },
