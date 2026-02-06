@@ -132,12 +132,12 @@ const PricingModule: React.FC<Props> = ({ onBack }) => {
         
         <ScenarioHeader 
           scenarios={filteredScenarios} 
-          activeScenarioId={activeScenarioId}
+          activeScenario={activeScenario}
           onSelectScenario={setActiveScenarioId}
           onRenameScenario={renameScenario}
           onUpdateSeason={updateSeason}
           onCreateScenario={createScenario}
-          onDuplicateScenario={duplicateScenario}
+          onCloneScenario={duplicateScenario}
           onCloseScenario={closeScenario}
           onDiscardDraft={discardDraft}
         />
