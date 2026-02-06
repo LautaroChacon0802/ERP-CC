@@ -1,132 +1,121 @@
 import React from 'react';
 import { Scenario, ScenarioStatus } from '../types';
-import { Plus, Copy, Save, XCircle } from 'lucide-react';
+import { 
+  ChevronDown, 
+  Copy, 
+  Trash2, 
+  Save, 
+  Edit3, 
+  Plus
+} from 'lucide-react';
 
-interface Props {
+interface ScenarioHeaderProps {
   scenarios: Scenario[];
-  activeScenarioId: string;
+  activeScenario: Scenario | undefined;
   onSelectScenario: (id: string) => void;
-  onRenameScenario: (name: string) => void;
-  onUpdateSeason?: (season: number) => void; // Nuevo prop para editar año
   onCreateScenario: () => void;
-  onDuplicateScenario: () => void;
+  onCloneScenario: () => void;
+  onRenameScenario: (name: string) => void;
+  onUpdateSeason: (season: number) => void;
+  onDiscardDraft: () => void;
   onCloseScenario: () => void;
-  onDiscardDraft?: () => void; // Nuevo prop para cancelar
 }
 
-const ScenarioHeader: React.FC<Props> = ({
+const ScenarioHeader: React.FC<ScenarioHeaderProps> = ({
   scenarios,
-  activeScenarioId,
+  activeScenario,
   onSelectScenario,
+  onCreateScenario,
+  onCloneScenario,
   onRenameScenario,
   onUpdateSeason,
-  onCreateScenario,
-  onDuplicateScenario,
-  onCloseScenario,
-  onDiscardDraft
+  onDiscardDraft,
+  onCloseScenario
 }) => {
-  const activeScenario = scenarios.find(s => s.id === activeScenarioId);
-  const isDraft = activeScenario?.status === ScenarioStatus.DRAFT;
-
   return (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="bg-white border-b border-gray-200 p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* Left Section: Selector & New Button */}
+      <div className="flex items-center gap-3 w-full md:w-auto">
         
-        {/* SECCIÓN IZQUIERDA: SELECTOR Y EDICIÓN */}
-        <div className="flex-1 w-full md:w-auto flex flex-col gap-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Seleccionar Escenario
-            </label>
-            
-            <div className="flex gap-2">
-                <select
-                    value={activeScenarioId}
-                    onChange={(e) => onSelectScenario(e.target.value)}
-                    className="block w-full md:w-64 border-gray-300 rounded-md shadow-sm focus:ring-castor-red focus:border-castor-red sm:text-sm"
-                >
-                    <option value="" disabled>-- Elegir --</option>
-                    {scenarios.map((s) => (
-                        <option key={s.id} value={s.id}>
-                           {s.season > 0 ? s.season : '----'} | {s.name || '(Sin Nombre)'} {s.status === ScenarioStatus.DRAFT ? '(BORRADOR)' : ''}
-                        </option>
-                    ))}
-                </select>
+        {/* NUEVO BOTÓN SOLICITADO */}
+        <button
+            onClick={onCreateScenario}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-700 transition-colors shadow-sm text-sm font-medium"
+        >
+            <Plus size={16} />
+            Nuevo
+        </button>
 
-                <button
-                    onClick={onCreateScenario}
-                    disabled={scenarios.some(s => s.status === ScenarioStatus.DRAFT)} // Bloquear si ya hay un borrador
-                    className="flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-castor-red hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    title="Nuevo Borrador"
-                >
-                    <Plus size={16} className="mr-1" /> Nuevo
-                </button>
-            </div>
-
-            {/* BARRA DE EDICIÓN DEL BORRADOR (Solo visible si es Draft) */}
-            {isDraft && activeScenario && (
-                <div className="flex items-center gap-2 mt-2 animate-fadeIn bg-yellow-50 p-2 rounded border border-yellow-200">
-                    <div className="w-24">
-                         <label className="block text-[10px] text-gray-500 font-bold mb-1">AÑO</label>
-                         <input
-                            type="number"
-                            placeholder="Ej: 2026"
-                            // Si es 0 mostramos vacío, si no, el valor
-                            value={activeScenario.season === 0 ? '' : activeScenario.season}
-                            onChange={(e) => onUpdateSeason && onUpdateSeason(parseInt(e.target.value) || 0)}
-                            className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-bold text-center h-9"
-                            autoFocus // Foco automático al crear
-                         />
-                    </div>
-                    <div className="flex-1">
-                        <label className="block text-[10px] text-gray-500 font-bold mb-1">NOMBRE DEL TARIFARIO</label>
-                        <input
-                            type="text"
-                            placeholder="Ej: Preventa Junio (Escribe un nombre)"
-                            value={activeScenario.name}
-                            onChange={(e) => onRenameScenario(e.target.value)}
-                            className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-9"
-                        />
-                    </div>
-                </div>
-            )}
-        </div>
-
-        {/* SECCIÓN DERECHA: ACCIONES */}
-        <div className="flex gap-2 w-full md:w-auto justify-end items-end h-full mt-auto">
-            {isDraft ? (
-                <>
-                    {/* BOTÓN CANCELAR */}
-                    <button
-                        onClick={onDiscardDraft}
-                        className="flex items-center px-4 py-2 border border-red-200 text-sm font-bold rounded-md text-red-600 bg-white hover:bg-red-50 shadow-sm transition-colors h-10"
-                        title="Descartar borrador y volver atrás"
-                    >
-                        <XCircle size={16} className="mr-2" />
-                        Cancelar
-                    </button>
-
-                    <button
-                        onClick={onCloseScenario}
-                        className="flex items-center px-4 py-2 border border-transparent text-sm font-bold rounded-md text-white bg-green-600 hover:bg-green-700 shadow-sm transition-colors h-10"
-                        title="Guardar definitivamente en Base de Datos"
-                    >
-                        <Save size={16} className="mr-2" />
-                        Cerrar y Guardar
-                    </button>
-                </>
-            ) : (
-                activeScenario && (
-                    <button
-                        onClick={onDuplicateScenario}
-                        className="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-colors h-10"
-                    >
-                        <Copy size={16} className="mr-2 text-gray-500" />
-                        Clonar Escenario
-                    </button>
-                )
-            )}
+        <div className="relative flex-1 md:flex-none">
+          <select
+            value={activeScenario?.id || ''}
+            onChange={(e) => onSelectScenario(e.target.value)}
+            className="block w-full md:w-64 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+          >
+            <option value="" disabled>Seleccionar escenario...</option>
+            {scenarios.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name || '(Sin Nombre)'} — {s.season} [{s.status === ScenarioStatus.DRAFT ? 'Borrador' : 'Final'}]
+              </option>
+            ))}
+          </select>
         </div>
       </div>
+
+      {/* Right Section: Actions */}
+      {activeScenario && (
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+          
+          <div className="flex flex-col md:flex-row gap-2 mr-4">
+             <input 
+                type="text" 
+                value={activeScenario.name} 
+                onChange={(e) => onRenameScenario(e.target.value)}
+                placeholder="Nombre del Tarifario"
+                disabled={activeScenario.status === ScenarioStatus.CLOSED}
+                className="border border-gray-300 rounded px-2 py-1 text-sm w-40 md:w-48"
+             />
+             <input 
+                type="number" 
+                value={activeScenario.season || ''} 
+                onChange={(e) => onUpdateSeason(Number(e.target.value))}
+                placeholder="Año"
+                disabled={activeScenario.status === ScenarioStatus.CLOSED}
+                className="border border-gray-300 rounded px-2 py-1 text-sm w-20"
+             />
+          </div>
+
+          <button
+            onClick={onCloneScenario}
+            className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            title="Clonar Escenario"
+          >
+            <Copy size={18} />
+          </button>
+
+          {activeScenario.status === ScenarioStatus.DRAFT && (
+            <>
+                <div className="h-6 w-px bg-gray-300 mx-2" />
+                
+                <button
+                    onClick={onDiscardDraft}
+                    className="flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded text-sm font-medium transition-colors"
+                >
+                    <Trash2 size={16} />
+                    Descartar
+                </button>
+
+                <button
+                    onClick={onCloseScenario}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 shadow-sm text-sm font-medium transition-colors"
+                >
+                    <Save size={16} />
+                    Publicar
+                </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };

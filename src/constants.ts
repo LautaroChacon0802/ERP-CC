@@ -1,7 +1,5 @@
 import { ScenarioType, ScenarioCategory, RentalItem } from './types';
 
-// ... (MANTENER CÓDIGO PREVIO INTACTO: SCENARIO_TYPES, SCENARIO_CATEGORIES, INITIAL_PARAMS) ...
-
 export const SCENARIO_TYPES = [
   { value: ScenarioType.BASE, label: 'Base' },
   { value: ScenarioType.DRAFT, label: 'Borrador' },
@@ -28,7 +26,6 @@ export const INITIAL_PARAMS = {
   rentalBasePrices: {}
 };
 
-// NUEVO: Íconos para Categorías de Stock
 export const CATEGORY_ICONS: Record<string, string> = {
     'AMENITIES': '🧴',
     'VAJILLA': '🍽️',
@@ -41,11 +38,53 @@ export const CATEGORY_ICONS: Record<string, string> = {
     'OTROS': '📦'
 };
 
+// ==========================================
+// RENTAL ITEMS DEFINITION
+// ==========================================
+
+const COMMON_EQUIPMENT_ITEMS = [
+  { id: 'sb_comp_ad', label: 'Snowboard Completo (Adulto)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  { id: 'sb_comp_mn', label: 'Snowboard Completo (Menor)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  { id: 'sb_tabla_ad', label: 'Snowboard Solo Tabla (Adulto)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  { id: 'sb_tabla_mn', label: 'Snowboard Solo Tabla (Menor)', type: 'SNOWBOARD', pricingUnit: 'DAY' },
+  { id: 'ski_jr_comp', label: 'Ski Junior Completo', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'ski_jr_tabla', label: 'Ski Junior Solo Tablas', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'ski_std_comp', label: 'Ski Estandar Completo', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'ski_std_tabla', label: 'Ski Estandar Solo Tablas', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'ski_high_comp', label: 'Ski Alta Gama Completo', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'ski_high_tabla', label: 'Ski Alta Gama Solo Tablas', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'ski_prem_comp', label: 'Ski Premium Completo', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'ski_prem_tabla', label: 'Ski Premium Solo Tablas', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'helmet', label: 'Casco', type: 'ACCESSORY', pricingUnit: 'DAY' }
+];
+
+const ALPINO_ITEMS = [
+  { id: 'patines', label: 'Patines de hielo', type: 'OTHER', pricingUnit: 'DAY' },
+  { id: 'raquetas', label: 'Raquetas de nieve', type: 'OTHER', pricingUnit: 'DAY' },
+  { id: 'nordico', label: 'Ski Nordico', type: 'SKI', pricingUnit: 'DAY' },
+  { id: 'locker_2', label: 'Locker x2', type: 'OTHER', pricingUnit: 'DAY' },
+  { id: 'locker_4', label: 'Locker x4', type: 'OTHER', pricingUnit: 'DAY' },
+  { id: 'pin_locker', label: 'Pin Locker', type: 'OTHER', pricingUnit: 'DAY' }
+];
+
+// Helper to generate items for a specific category
+const generateItems = (items: any[], category: ScenarioCategory): RentalItem[] => {
+  return items.map(item => ({
+    ...item,
+    category,
+    isFixedDuration: false // Default to false
+  }));
+};
+
 export const RENTAL_ITEMS: RentalItem[] = [
-  // ... (MANTENER CÓDIGO RENTAL_ITEMS EXISTENTE) ...
-  { id: 'mnt_ski_jr_compl', label: 'Esquí Junior + Botas + Bastones', category: 'RENTAL_MOUNTAIN', type: 'SKI', pricingUnit: 'DAY', isFixedDuration: false },
-  // ... (Asumimos el resto de la lista existente aquí) ...
-  { id: 'alp_locker', label: 'Locker', category: 'RENTAL_ALPINO', type: 'OTHER', pricingUnit: 'DAY', isFixedDuration: false },
+  // Equipos para RENTAL_MOUNTAIN (Base / Morada)
+  ...generateItems(COMMON_EQUIPMENT_ITEMS, 'RENTAL_MOUNTAIN'),
+  
+  // Equipos para RENTAL_CITY (Ciudad)
+  ...generateItems(COMMON_EQUIPMENT_ITEMS, 'RENTAL_CITY'),
+
+  // Items para RENTAL_ALPINO
+  ...generateItems(ALPINO_ITEMS, 'RENTAL_ALPINO')
 ];
 
 export const getItemsByCategory = (cat: string) => RENTAL_ITEMS.filter(i => i.category === cat);

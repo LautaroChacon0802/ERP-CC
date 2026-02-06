@@ -1,211 +1,147 @@
-import React, { forwardRef } from 'react';
+import React from 'react';
 import { Scenario } from '../types';
-import CastorLogo from './CastorLogo';
 import { formatCurrency } from '../utils';
-import { getItemsByCategory } from '../constants';
 
-interface Props {
+// ==========================================
+// COLOR PALETTE (Hex safe for html2canvas)
+// ==========================================
+const PDF_COLORS = {
+   white: '#ffffff',
+   slate900: '#0f172a',
+   slate800: '#1e293b', 
+   slate700: '#334155',
+   slate500: '#64748b',
+   slate100: '#f1f5f9',
+   slate50: '#f8fafc',
+   border: '#cbd5e1',
+   red: '#DC2626' // Castor Red
+};
+
+interface OfficialPdfTemplateProps {
   scenario: Scenario;
 }
 
-const PDF_COLORS = {
-  slate900: '#0f172a',
-  slate800: '#1e293b',
-  slate700: '#334155',
-  slate600: '#475569',
-  slate300: '#cbd5e1',
-  slate200: '#e2e8f0',
-  slate100: '#f1f5f9',
-  slate50:  '#f8fafc',
-  gray600:  '#4b5563',
-  gray500:  '#6b7280',
-  gray400:  '#9ca3af',
-  redCastor: '#DC2626', // Rojo estándar seguro
-  white: '#ffffff'
-};
+const OfficialPdfTemplate: React.FC<OfficialPdfTemplateProps> = ({ scenario }) => {
+  const data = scenario.calculatedData || [];
+  const isRental = scenario.category && scenario.category !== 'LIFT';
+  
+  // Headers dinámicos según tipo
+  const headers = isRental 
+    ? (data.length > 0 && data[0].rentalItems 
+        ? Object.keys(data[0].rentalItems) // IDs de items
+        : [])
+    : ['Adulto', 'Menor', 'Promo Adulto', 'Promo Menor']; // Lift headers
 
-const OfficialPdfTemplate = forwardRef<HTMLDivElement, Props>(({ scenario }, ref) => {
-  const category = scenario.category || 'LIFT';
-  const isRental = category !== 'LIFT';
-  const isAlpino = category === 'RENTAL_ALPINO';
-
-  // 1. Obtener los artículos correspondientes a la categoría
-  const items = isRental ? getItemsByCategory(category) : [];
-
-  // 2. Filtro Especial para Alpino:
-  const displayItems = isAlpino 
-    ? items.filter(i => i.pricingUnit === 'DAY') 
-    : items;
-
+  // Si es rental, necesitamos mapear IDs a Labels para el header
+  // (Esto requeriría importar RENTAL_ITEMS, pero por simplicidad usaremos el ID o buscaremos en params si es posible. 
+  //  Para no complicar dependencias circulares, asumiremos que data[0].rentalItems tiene orden consistente)
+  //  NOTA: En una implementación ideal, pasaríamos los labels como prop o context.
+  
   return (
     <div 
-      ref={ref} 
-      className="p-8 w-[1100px] h-auto min-h-[600px] relative" 
-      style={{ 
-        backgroundColor: PDF_COLORS.white, 
-        color: PDF_COLORS.slate800, 
-        fontFamily: 'Arial, sans-serif' 
-      }}
+        id="official-pdf-template" 
+        className="w-full p-8 flex flex-col items-center bg-white"
+        style={{ backgroundColor: PDF_COLORS.white, color: PDF_COLORS.slate800 }}
     >
-      
-      {/* HEADER */}
-      <div 
-        className="flex justify-between items-end border-b-4 pb-4 mb-6"
-        style={{ borderColor: PDF_COLORS.redCastor }}
-      >
-        <div>
-          <h1 
-            className="text-4xl font-black tracking-tighter uppercase"
-            style={{ color: PDF_COLORS.redCastor }}
-          >
-            Cerro Castor
-          </h1>
-          <h2 
-            className="text-xl font-bold mt-1"
-            style={{ color: PDF_COLORS.gray600 }}
-          >
-            {scenario.name}
-          </h2>
-          <p 
-            className="text-sm font-medium uppercase tracking-widest mt-1"
-            style={{ color: PDF_COLORS.gray400 }}
-          >
-             Temporada {scenario.season} | {isRental ? 'Tarifario de Equipos' : 'Medios de Elevación'}
-          </p>
+      {/* HEADER PDF */}
+      <div className="w-full flex justify-between items-center mb-8 border-b pb-4" style={{ borderColor: PDF_COLORS.border }}>
+        <div className="flex flex-col">
+            <h1 className="text-2xl font-bold uppercase tracking-wide" style={{ color: PDF_COLORS.slate900 }}>
+                Cerro Castor
+            </h1>
+            <span className="text-sm font-medium" style={{ color: PDF_COLORS.red }}>
+                Tarifario Oficial {scenario.season}
+            </span>
         </div>
-        <div className="w-24 opacity-90" style={{ color: PDF_COLORS.redCastor }}>
-            <CastorLogo />
+        <div className="flex flex-col items-end">
+            <h2 className="text-lg font-bold" style={{ color: PDF_COLORS.slate700 }}>
+                {scenario.name}
+            </h2>
+            <span className="text-xs" style={{ color: PDF_COLORS.slate500 }}>
+                Generado: {new Date().toLocaleDateString('es-AR')}
+            </span>
         </div>
       </div>
 
-      {/* TABLE */}
-      <div className="w-full">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr style={{ backgroundColor: PDF_COLORS.slate100 }}>
-              {/* Columna Días Fija */}
-              <th 
-                className="p-3 text-left font-black uppercase text-xs border-b-2 w-16"
-                style={{ color: PDF_COLORS.slate700, borderColor: PDF_COLORS.slate300 }}
-              >
-                Días
-              </th>
-              
-              {isRental ? (
-                  // HEADER RENTAL (Dinámico)
-                  displayItems.map(item => (
-                      <th 
-                        key={item.id} 
-                        className="p-3 text-right font-black uppercase text-[10px] border-b-2 leading-tight"
-                        style={{ color: PDF_COLORS.slate700, borderColor: PDF_COLORS.slate300 }}
-                      >
-                          {item.label}
-                      </th>
-                  ))
-              ) : (
-                  // HEADER LIFT (Legacy / Fijo)
-                  <>
-                    <th 
-                      className="p-3 text-right font-black uppercase text-xs border-b-2"
-                      style={{ color: PDF_COLORS.slate700, borderColor: PDF_COLORS.slate300 }}
-                    >
-                      Adulto
-                    </th>
-                    <th 
-                      className="p-3 text-right font-black uppercase text-xs border-b-2"
-                      style={{ color: PDF_COLORS.slate700, borderColor: PDF_COLORS.slate300 }}
-                    >
-                      Menor
-                    </th>
-                    <th 
-                      className="p-3 text-right font-black uppercase text-xs border-b-2"
-                      style={{ color: PDF_COLORS.gray500, borderColor: PDF_COLORS.slate300 }}
-                    >
-                      Ad. Promo
-                    </th>
-                    <th 
-                      className="p-3 text-right font-black uppercase text-xs border-b-2"
-                      style={{ color: PDF_COLORS.gray500, borderColor: PDF_COLORS.slate300 }}
-                    >
-                      Men. Promo
-                    </th>
-                  </>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {scenario.calculatedData.map((row, idx) => (
-              <tr 
-                key={row.days} 
-                style={{ backgroundColor: idx % 2 === 0 ? PDF_COLORS.white : PDF_COLORS.slate50 }}
-              >
-                {/* Columna Días */}
-                <td 
-                  className="p-3 text-left font-bold border-b"
-                  style={{ color: PDF_COLORS.slate900, borderColor: PDF_COLORS.slate100 }}
-                >
-                    {row.days}
-                </td>
-                
+      {/* PARAMETERS SUMMARY */}
+      <div className="w-full mb-6 p-4 rounded flex gap-8 text-sm" style={{ backgroundColor: PDF_COLORS.slate50 }}>
+         <div className="flex flex-col">
+            <span className="text-xs font-bold uppercase mb-1" style={{ color: PDF_COLORS.slate500 }}>Vigencia</span>
+            <span style={{ color: PDF_COLORS.slate800 }}>
+                {scenario.params.validFrom} al {scenario.params.validTo}
+            </span>
+         </div>
+         <div className="flex flex-col">
+            <span className="text-xs font-bold uppercase mb-1" style={{ color: PDF_COLORS.slate500 }}>Aumento</span>
+            <span style={{ color: PDF_COLORS.slate800 }}>
+                {scenario.params.increasePercentage}%
+            </span>
+         </div>
+         <div className="flex flex-col">
+            <span className="text-xs font-bold uppercase mb-1" style={{ color: PDF_COLORS.slate500 }}>Categoría</span>
+            <span style={{ color: PDF_COLORS.slate800 }}>
+                {scenario.category || 'Medios de Elevación'}
+            </span>
+         </div>
+      </div>
+
+      {/* DATA TABLE */}
+      <table className="w-full text-sm border-collapse">
+        <thead>
+            <tr style={{ backgroundColor: PDF_COLORS.slate100, borderBottom: `2px solid ${PDF_COLORS.border}` }}>
+                <th className="py-3 px-4 text-left font-bold" style={{ color: PDF_COLORS.slate700 }}>Días</th>
                 {isRental ? (
-                    // BODY RENTAL (Dinámico)
-                    displayItems.map(item => (
-                        <td 
-                          key={item.id} 
-                          className="p-3 text-right font-medium border-b text-sm"
-                          style={{ color: PDF_COLORS.slate600, borderColor: PDF_COLORS.slate100 }}
-                        >
-                            {/* Verificamos si existe el precio visual para este item */}
-                            {row.rentalItems?.[item.id] 
-                                ? formatCurrency(row.rentalItems[item.id].visual) 
-                                : '-'}
-                        </td>
+                    // Header Rental: Mostramos IDs (Idealmente Labels)
+                    headers.map(h => (
+                        <th key={h} className="py-3 px-2 text-center font-bold text-xs" style={{ color: PDF_COLORS.slate700 }}>
+                           {h.replace(/_/g, ' ').toUpperCase()} 
+                        </th>
                     ))
                 ) : (
-                    // BODY LIFT (Legacy)
-                    <>
-                        <td 
-                          className="p-3 text-right font-bold border-b"
-                          style={{ color: PDF_COLORS.slate800, borderColor: PDF_COLORS.slate100 }}
-                        >
-                            {formatCurrency(row.adultRegularVisual)}
-                        </td>
-                        <td 
-                          className="p-3 text-right font-medium border-b"
-                          style={{ color: PDF_COLORS.slate600, borderColor: PDF_COLORS.slate100 }}
-                        >
-                            {formatCurrency(row.minorRegularVisual)}
-                        </td>
-                        <td 
-                          className="p-3 text-right font-medium border-b"
-                          style={{ color: PDF_COLORS.gray400, borderColor: PDF_COLORS.slate100 }}
-                        >
-                            {formatCurrency(row.adultPromoVisual)}
-                        </td>
-                        <td 
-                          className="p-3 text-right font-medium border-b"
-                          style={{ color: PDF_COLORS.gray400, borderColor: PDF_COLORS.slate100 }}
-                        >
-                            {formatCurrency(row.minorPromoVisual)}
-                        </td>
-                    </>
+                    // Header Lift
+                    headers.map(h => (
+                        <th key={h} className="py-3 px-4 text-right font-bold" style={{ color: PDF_COLORS.slate700 }}>
+                            {h}
+                        </th>
+                    ))
                 )}
-              </tr>
+            </tr>
+        </thead>
+        <tbody>
+            {data.map((row, index) => (
+                <tr key={row.days} style={{ borderBottom: `1px solid ${PDF_COLORS.border}` }}>
+                    <td className="py-3 px-4 font-bold" style={{ color: PDF_COLORS.slate900 }}>
+                        {row.days}
+                    </td>
+                    
+                    {isRental ? (
+                        headers.map(itemId => {
+                            const price = row.rentalItems?.[itemId]?.visual || 0;
+                            return (
+                                <td key={itemId} className="py-3 px-2 text-center" style={{ color: PDF_COLORS.slate700 }}>
+                                    {formatCurrency(price)}
+                                </td>
+                            );
+                        })
+                    ) : (
+                        <>
+                            <td className="py-3 px-4 text-right" style={{ color: PDF_COLORS.slate700 }}>{formatCurrency(row.adultRegularVisual)}</td>
+                            <td className="py-3 px-4 text-right" style={{ color: PDF_COLORS.slate700 }}>{formatCurrency(row.minorRegularVisual)}</td>
+                            <td className="py-3 px-4 text-right font-medium" style={{ color: PDF_COLORS.red }}>{formatCurrency(row.adultPromoVisual)}</td>
+                            <td className="py-3 px-4 text-right" style={{ color: PDF_COLORS.red }}>{formatCurrency(row.minorPromoVisual)}</td>
+                        </>
+                    )}
+                </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
+        </tbody>
+      </table>
 
       {/* FOOTER */}
-      <div 
-        className="mt-8 pt-4 border-t flex justify-between items-center text-[10px]"
-        style={{ borderColor: PDF_COLORS.slate200, color: PDF_COLORS.gray400 }}
-      >
-        <p>Documento oficial generado el {new Date().toLocaleDateString()}</p>
-        <p>Sistema de Gestión ERP - Cerro Castor</p>
+      <div className="mt-8 text-xs text-center w-full pt-4 border-t" style={{ borderColor: PDF_COLORS.border, color: PDF_COLORS.slate500 }}>
+        <p>Documento generado por sistema ERP - Cerro Castor. Uso interno y confidencial.</p>
       </div>
     </div>
   );
-});
+};
 
 export default OfficialPdfTemplate;

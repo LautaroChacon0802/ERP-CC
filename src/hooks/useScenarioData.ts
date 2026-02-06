@@ -9,7 +9,6 @@ import {
   ScenarioCategory
 } from '../types';
 import { BackendService } from '../api/backend';
-// Se agrega calculateScenarioPrices para inicializar datos correctamente
 import { INITIAL_PARAMS, migrateParams, calculateScenarioPrices } from '../utils';
 
 export const useScenarioData = () => {
@@ -126,9 +125,8 @@ export const useScenarioData = () => {
         ? baseCoefficients
         : defaultCoefficients;
 
-    // FIX LOGIC: Inicializar calculatedData usando el motor de cálculo compartido.
-    // Esto asegura que si es Rental, se creen las filas con rentalItems inicializados,
-    // y si es Lift, se calculen los precios base.
+    // FIX CRÍTICO: Cálculo inicial de datos al crear el borrador
+    // Esto asegura que si es Rental, se itere sobre los items y se generen las columnas
     const initialCalculatedData = calculateScenarioPrices(
         newParams,
         effectiveCoefficients,
@@ -151,7 +149,7 @@ export const useScenarioData = () => {
 
     setScenarios(prev => [newScenario, ...prev]);
     return newId;
-  }, [defaultCoefficients]); // Agregamos dependencia para que tome el valor actualizado
+  }, [defaultCoefficients]); 
 
   const updateLocalScenarioParams = useCallback((id: string, newParams: Partial<ScenarioParams>) => {
     setScenarios(prev => prev.map(s => s.id === id 
