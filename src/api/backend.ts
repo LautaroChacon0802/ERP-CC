@@ -16,7 +16,7 @@ const safeJsonParse = (val: any, fallback: any) => {
 
 export const fetchScenarios = async (): Promise<Scenario[]> => {
   const { data, error } = await supabase
-    .from('pricing_scenarios') // FIX: Tabla correcta
+    .from('pricing_scenarios') 
     .select('*')
     .order('created_at', { ascending: false });
 
@@ -34,12 +34,12 @@ export const fetchScenarios = async (): Promise<Scenario[]> => {
     closedAt: s.closed_at,
     params: safeJsonParse(s.params, {}),
     coefficients: safeJsonParse(s.coefficients, []),
-    calculatedData: safeJsonParse(s.calculated_data, []),
+    calculatedData: safeJsonParse(s.calculated_data, []), // Mapeo snake_case -> camelCase
   }));
 };
 
 export const createScenario = async (scenario: Scenario) => {
-  const { error } = await supabase.from('pricing_scenarios').insert({ // FIX: Tabla correcta
+  const { error } = await supabase.from('pricing_scenarios').insert({
     id: scenario.id,
     name: scenario.name,
     season: scenario.season,
@@ -49,7 +49,7 @@ export const createScenario = async (scenario: Scenario) => {
     base_scenario_id: scenario.baseScenarioId,
     created_at: scenario.createdAt,
     closed_at: scenario.closedAt,
-    params: scenario.params,
+    params: scenario.params,           // Supabase maneja JSONB automáticamente
     coefficients: scenario.coefficients,
     calculated_data: scenario.calculatedData
   });
@@ -60,7 +60,7 @@ export const createScenario = async (scenario: Scenario) => {
 
 export const updateScenario = async (scenario: Scenario) => {
   const { error } = await supabase
-    .from('pricing_scenarios') // FIX: Tabla correcta
+    .from('pricing_scenarios')
     .update({
       name: scenario.name,
       season: scenario.season,
@@ -77,18 +77,8 @@ export const updateScenario = async (scenario: Scenario) => {
   return true;
 };
 
-export const updateScenarioParams = async (id: string, params: ScenarioParams) => {
-  const { error } = await supabase
-    .from('pricing_scenarios') // FIX: Tabla correcta
-    .update({ params })
-    .eq('id', id);
-
-  if (error) throw error;
-  return true;
-};
-
 export const deleteScenario = async (id: string) => {
-  const { error } = await supabase.from('pricing_scenarios').delete().eq('id', id); // FIX: Tabla correcta
+  const { error } = await supabase.from('pricing_scenarios').delete().eq('id', id);
   if (error) throw error;
   return true;
 };
@@ -96,15 +86,18 @@ export const deleteScenario = async (id: string) => {
 // --- SERVICE OBJECT ---
 export const BackendService = {
   getHistory: fetchScenarios,
+  
   getDefaultCoefficients: async () => {
-      // FIX: Días explícitos requeridos [1..10, 15, 30]
+      // Configuración por defecto para inicializar nuevos escenarios
       const ALLOWED_DAYS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 30];
       return ALLOWED_DAYS.map(d => ({ day: d, value: 0 }));
   },
   
   saveScenario: async (scenario: Scenario) => {
     try {
-      const { data } = await supabase.from('pricing_scenarios').select('id').eq('id', scenario.id).maybeSingle(); // FIX: Tabla correcta
+      // Verificamos si existe para decidir entre Update o Insert
+      const { data } = await supabase.from('pricing_scenarios').select('id').eq('id', scenario.id).maybeSingle();
+      
       if (data) {
         await updateScenario(scenario);
       } else {
@@ -115,5 +108,7 @@ export const BackendService = {
       console.error("BackendService Save Error:", e);
       return false;
     }
-  }
+  },
+
+  deleteScenario: deleteScenario
 };
