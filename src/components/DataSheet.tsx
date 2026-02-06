@@ -3,7 +3,7 @@ import { Scenario } from '../types';
 import { formatCurrency, formatDecimal, format4Decimals } from '../utils'; 
 import { Download, Table, FileText, Image } from 'lucide-react';
 import { useExport } from '../hooks/useExport';
-import { getItemsByCategory } from '../constants'; // FIX: Importar getter de items
+import { getItemsByCategory } from '../constants';
 
 interface DataSheetProps {
   scenario: Scenario;
@@ -18,128 +18,12 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
   const cleanName = (scenario.name || 'tarifario').replace(/[^a-z0-9]/gi, '_');
   const TABLE_ID = "pricing-table-export";
 
-  // Lógica de detección de tipo para renderizado dinámico
+  // Lógica de detección de categoría
   const category = scenario.category || 'LIFT';
   const isRental = category !== 'LIFT';
-  const rentalItems = isRental ? getItemsByCategory(category) : [];
 
-  const renderHeaders = () => {
-    // CASO RENTAL: Columnas dinámicas por Item
-    if (isRental) {
-        return (
-            <>
-                {rentalItems.map(item => (
-                    <th key={item.id} className="px-6 py-3 text-left text-xs font-medium text-blue-800 uppercase tracking-wider whitespace-nowrap">
-                        {item.label}
-                    </th>
-                ))}
-            </>
-        );
-    }
-
-    // CASO LIFT (Estático)
-    if (viewMode === 'visual') {
-      return (
-        <>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adulto (Venta)</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Menor (Venta)</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-purple-600 uppercase tracking-wider">Promo Adulto</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-purple-600 uppercase tracking-wider">Promo Menor</th>
-        </>
-      );
-    }
-    if (viewMode === 'system') {
-      return (
-        <>
-          <th className="px-6 py-3 text-left text-xs font-medium text-blue-600 uppercase tracking-wider">Ad. Diario (Sis)</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-blue-600 uppercase tracking-wider">Mn. Diario (Sis)</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-blue-600 uppercase tracking-wider">Ad. Promo (Sis)</th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-blue-600 uppercase tracking-wider">Mn. Promo (Sis)</th>
-        </>
-      );
-    }
-    // Matrix (Default / Debug)
-    return (
-      <>
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adulto (Raw)</th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adulto (Final)</th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Menor (Raw)</th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Menor (Final)</th>
-      </>
-    );
-  };
-
-  const renderRows = (row: any) => {
-    // CASO RENTAL: Celdas dinámicas
-    if (isRental) {
-        return (
-            <>
-                {rentalItems.map(item => {
-                    // FIX: Fallback defensivo por seguridad
-                    const itemData = row.rentalItems?.[item.id];
-                    const valVisual = itemData?.visual ?? 0;
-                    const valSystem = itemData?.dailySystem ?? 0;
-                    const valRaw = itemData?.raw ?? 0;
-
-                    // Lógica de visualización por celda
-                    if (viewMode === 'system') {
-                        return (
-                            <td key={item.id} className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">
-                                {format4Decimals(valSystem)}
-                            </td>
-                        );
-                    }
-                    if (viewMode === 'matrix') {
-                         return (
-                            <td key={item.id} className="px-6 py-4 whitespace-nowrap text-sm">
-                                <div className="flex flex-col">
-                                    <span className="text-xs text-gray-400">{formatDecimal(valRaw)}</span>
-                                    <span className="font-bold text-gray-900">{formatCurrency(valVisual)}</span>
-                                </div>
-                            </td>
-                         );
-                    }
-                    // Default: Visual
-                    return (
-                        <td key={item.id} className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                            {formatCurrency(valVisual)}
-                        </td>
-                    );
-                })}
-            </>
-        );
-    }
-
-    // CASO LIFT (Estático)
-    if (viewMode === 'visual') {
-      return (
-        <>
-          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{formatCurrency(row.adultRegularVisual)}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(row.minorRegularVisual)}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-purple-700 font-medium">{formatCurrency(row.adultPromoVisual)}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-purple-700">{formatCurrency(row.minorPromoVisual)}</td>
-        </>
-      );
-    }
-    if (viewMode === 'system') {
-      return (
-        <>
-          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">{format4Decimals(row.adultRegularDailySystem)}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">{format4Decimals(row.minorRegularDailySystem)}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">{format4Decimals(row.adultPromoDailySystem)}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-blue-700">{format4Decimals(row.minorPromoDailySystem)}</td>
-        </>
-      );
-    }
-    return (
-      <>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{formatDecimal(row.adultRegularRaw)}</td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{formatCurrency(row.adultRegularVisual)}</td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{formatDecimal(row.minorRegularRaw)}</td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(row.minorRegularVisual)}</td>
-      </>
-    );
-  };
+  // Clase para columna sticky
+  const stickyColClass = "sticky left-0 bg-white z-10 text-left font-bold text-gray-900 border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]";
 
   return (
     <div className="h-full flex flex-col">
@@ -203,24 +87,97 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
                 </div>
             </div>
 
-            <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-                <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Días</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Coef</th>
-                {renderHeaders()}
-                </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-                {data.map((row) => (
-                <tr key={row.days} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{row.days}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.coefficient}</td>
-                    {renderRows(row)}
-                </tr>
-                ))}
-            </tbody>
-            </table>
+            {/* TABLA TRANSPUESTA */}
+            <div className="overflow-x-auto pb-4">
+              <table className="min-w-full divide-y divide-gray-200 border-separate border-spacing-0">
+                <thead className="bg-gray-50">
+                    <tr>
+                      {/* Header Fijo: Concepto */}
+                      <th className={`px-6 py-3 text-xs uppercase tracking-wider w-48 ${stickyColClass} text-gray-500`}>
+                        Concepto
+                      </th>
+                      
+                      {/* Columnas Dinámicas: Días */}
+                      {data.map((row) => (
+                        <th key={row.days} className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                          {row.days} Días
+                        </th>
+                      ))}
+                    </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                    
+                    {/* CASO B: RENTAL (EQUIPOS) */}
+                    {isRental ? (
+                      getItemsByCategory(category).map((item) => (
+                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                          {/* Fila: Nombre del Item */}
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm ${stickyColClass}`}>
+                            {item.label}
+                          </td>
+                          {/* Celdas: Precios por día */}
+                          {data.map((row) => (
+                            <td key={`${item.id}-${row.days}`} className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                              {formatCurrency(row.rentalItems?.[item.id]?.visual ?? 0)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    ) : (
+                      /* CASO A: LIFT (PASES) - Estrictamente 4 filas */
+                      <>
+                        {/* Fila 1: Adulto Regular */}
+                        <tr className="hover:bg-gray-50 transition-colors">
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm ${stickyColClass}`}>
+                            Adulto (Regular)
+                          </td>
+                          {data.map((row) => (
+                            <td key={`ar-${row.days}`} className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                              {formatCurrency(row.adultRegularVisual)}
+                            </td>
+                          ))}
+                        </tr>
+
+                        {/* Fila 2: Menor Regular */}
+                        <tr className="hover:bg-gray-50 transition-colors">
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm ${stickyColClass}`}>
+                            Menor (Regular)
+                          </td>
+                          {data.map((row) => (
+                            <td key={`mr-${row.days}`} className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                              {formatCurrency(row.minorRegularVisual)}
+                            </td>
+                          ))}
+                        </tr>
+
+                        {/* Fila 3: Adulto Promo */}
+                        <tr className="hover:bg-gray-50 transition-colors">
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm text-purple-700 ${stickyColClass}`}>
+                            Adulto (Promo)
+                          </td>
+                          {data.map((row) => (
+                            <td key={`ap-${row.days}`} className="px-6 py-4 whitespace-nowrap text-sm text-right text-purple-700 font-medium">
+                              {formatCurrency(row.adultPromoVisual)}
+                            </td>
+                          ))}
+                        </tr>
+
+                        {/* Fila 4: Menor Promo */}
+                        <tr className="hover:bg-gray-50 transition-colors">
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm text-purple-700 ${stickyColClass}`}>
+                            Menor (Promo)
+                          </td>
+                          {data.map((row) => (
+                            <td key={`mp-${row.days}`} className="px-6 py-4 whitespace-nowrap text-sm text-right text-purple-700">
+                              {formatCurrency(row.minorPromoVisual)}
+                            </td>
+                          ))}
+                        </tr>
+                      </>
+                    )}
+                </tbody>
+              </table>
+            </div>
             
             {!hasData && (
                 <div className="p-8 text-center text-gray-400 flex flex-col items-center">
