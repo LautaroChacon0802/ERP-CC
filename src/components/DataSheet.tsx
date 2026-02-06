@@ -127,6 +127,23 @@ const DataSheet: React.FC<DataSheetProps> = ({ scenario, viewMode }) => {
       <div className="flex-1 overflow-auto bg-white" id={TABLE_ID}>
         <div className="bg-white p-4"> {/* Padding extra para que el PDF se vea bien */}
             <h2 className="text-xl font-bold mb-4 text-center hidden" id="print-title">{scenario.name} - Temporada {scenario.season}</h2>
+            
+            {/* NUEVO: Header de Parámetros en Tabla */}
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded flex gap-6 text-sm text-yellow-800">
+                <div className="flex flex-col">
+                    <span className="text-xs text-yellow-600 uppercase font-semibold">% Aumento</span>
+                    <span className="font-bold">{scenario.params.increasePercentage}%</span>
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-xs text-yellow-600 uppercase font-semibold">Redondeo</span>
+                    <span className="font-bold">${scenario.params.roundingValue}</span>
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-xs text-yellow-600 uppercase font-semibold">% Promo</span>
+                    <span className="font-bold">{scenario.params.promoDiscountPercentage}%</span>
+                </div>
+            </div>
+
             <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
                 <tr>

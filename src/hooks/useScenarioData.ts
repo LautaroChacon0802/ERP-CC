@@ -9,7 +9,8 @@ import {
   ScenarioCategory
 } from '../types';
 import { BackendService } from '../api/backend';
-import { INITIAL_PARAMS, migrateParams } from '../utils';
+// Se agrega calculateScenarioPrices para inicializar datos correctamente
+import { INITIAL_PARAMS, migrateParams, calculateScenarioPrices } from '../utils';
 
 export const useScenarioData = () => {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -55,6 +56,15 @@ export const useScenarioData = () => {
 
       if (migratedHistory.length === 0) {
           const seedId = generateId();
+          const seedParams = { ...INITIAL_PARAMS, baseRateAdult1Day: 45000 };
+          
+          // FIX: Calcular datos iniciales para el escenario semilla
+          const initialCalculatedData = calculateScenarioPrices(
+              seedParams, 
+              configCoefs, 
+              'LIFT'
+          );
+
           const seedScenario: Scenario = {
             id: seedId,
             name: `Tarifario Base`,
@@ -65,9 +75,9 @@ export const useScenarioData = () => {
             status: ScenarioStatus.CLOSED,
             createdAt: new Date().toISOString(),
             closedAt: new Date().toISOString(),
-            params: { ...INITIAL_PARAMS, baseRateAdult1Day: 45000 },
+            params: seedParams,
             coefficients: configCoefs,
-            calculatedData: [] 
+            calculatedData: initialCalculatedData 
           };
           setScenarios([seedScenario]);
           return seedScenario.id; 
@@ -116,6 +126,15 @@ export const useScenarioData = () => {
         ? baseCoefficients
         : defaultCoefficients;
 
+    // FIX LOGIC: Inicializar calculatedData usando el motor de cálculo compartido.
+    // Esto asegura que si es Rental, se creen las filas con rentalItems inicializados,
+    // y si es Lift, se calculen los precios base.
+    const initialCalculatedData = calculateScenarioPrices(
+        newParams,
+        effectiveCoefficients,
+        category
+    );
+
     const newScenario: Scenario = {
       id: newId,
       name: "",
@@ -127,7 +146,7 @@ export const useScenarioData = () => {
       createdAt: new Date().toISOString(),
       params: newParams,
       coefficients: effectiveCoefficients.map(c => ({...c})), // Deep copy seguro
-      calculatedData: [] 
+      calculatedData: initialCalculatedData 
     };
 
     setScenarios(prev => [newScenario, ...prev]);
