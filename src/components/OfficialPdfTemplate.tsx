@@ -4,7 +4,7 @@ import { formatCurrency } from '../utils';
 import CastorLogo from './CastorLogo';
 
 // ==========================================
-// PALETA DE COLORES (Definición Centralizada)
+// PALETA DE COLORES (Sanitizada a Hex Safe)
 // ==========================================
 const STYLES = {
   colors: {
@@ -13,7 +13,7 @@ const STYLES = {
     accent: '#C8102E', // Rojo Castor
     bgHeader: '#F8FAFC',
     border: '#E2E8F0',
-    white: '#ffffff',
+    white: '#FFFFFF', // Hex explícito, no usar string 'white'
   },
   fonts: {
     family: 'Inter, system-ui, sans-serif',
@@ -36,7 +36,7 @@ const OfficialPdfTemplate: React.FC<OfficialPdfTemplateProps> = ({ scenario }) =
   // --- ESTILOS REUTILIZABLES ---
   const tableHeaderStyle = {
     backgroundColor: STYLES.colors.bgHeader,
-    color: STYLES.colors.secondary,
+    color: STYLES.colors.secondary, // Hex seguro
     fontWeight: 700,
     fontSize: '11px',
     textTransform: 'uppercase' as const,
@@ -175,7 +175,7 @@ const OfficialPdfTemplate: React.FC<OfficialPdfTemplateProps> = ({ scenario }) =
     <div 
         id="official-pdf-template" 
         style={{ 
-            width: '1200px', // Ancho fijo para exportación estable
+            width: '1200px', 
             backgroundColor: STYLES.colors.white,
             color: STYLES.colors.primary,
             padding: '60px',
@@ -244,7 +244,7 @@ const OfficialPdfTemplate: React.FC<OfficialPdfTemplateProps> = ({ scenario }) =
             left: '32px', 
             transform: 'translateY(-50%)', 
             backgroundColor: STYLES.colors.accent, 
-            color: 'white', 
+            color: STYLES.colors.white, // Hex Safe
             padding: '4px 12px', 
             borderRadius: '4px',
             fontSize: '11px',
