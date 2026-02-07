@@ -1,9 +1,3 @@
-@import "tailwindcss";
-
-/* FIX CRÍTICO: React-PDF / html2canvas crash con Tailwind v4.
-  Tailwind v4 usa 'oklch' para los colores base, lo cual rompe el parser de estilos
-  de las librerías de generación de PDF. Forzamos Hex aquí.
-*/
-body {
-  color: #000000;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
