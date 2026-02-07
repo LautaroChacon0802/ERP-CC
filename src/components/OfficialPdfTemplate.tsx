@@ -1,20 +1,23 @@
 import React from 'react';
 import { Scenario } from '../types';
 import { formatCurrency } from '../utils';
+import CastorLogo from './CastorLogo';
 
 // ==========================================
-// COLOR PALETTE (Hex safe for html2canvas)
+// PALETA DE COLORES (Definición Centralizada)
 // ==========================================
-const PDF_COLORS = {
-   white: '#ffffff',
-   slate900: '#0f172a',
-   slate800: '#1e293b', 
-   slate700: '#334155',
-   slate500: '#64748b',
-   slate100: '#f1f5f9',
-   slate50: '#f8fafc',
-   border: '#cbd5e1',
-   red: '#DC2626' // Castor Red
+const STYLES = {
+  colors: {
+    primary: '#000000',
+    secondary: '#8A99A8',
+    accent: '#C8102E', // Rojo Castor
+    bgHeader: '#F8FAFC',
+    border: '#E2E8F0',
+    white: '#ffffff',
+  },
+  fonts: {
+    family: 'Inter, system-ui, sans-serif',
+  }
 };
 
 interface OfficialPdfTemplateProps {
@@ -25,120 +28,264 @@ const OfficialPdfTemplate: React.FC<OfficialPdfTemplateProps> = ({ scenario }) =
   const data = scenario.calculatedData || [];
   const isRental = scenario.category && scenario.category !== 'LIFT';
   
-  // Headers dinámicos según tipo
-  const headers = isRental 
-    ? (data.length > 0 && data[0].rentalItems 
-        ? Object.keys(data[0].rentalItems) // IDs de items
-        : [])
-    : ['Adulto', 'Menor', 'Promo Adulto', 'Promo Menor']; // Lift headers
+  // Formateo de Fechas para el Header
+  const validFrom = scenario.params.validFrom ? new Date(scenario.params.validFrom).toLocaleDateString('es-AR') : '-';
+  const validTo = scenario.params.validTo ? new Date(scenario.params.validTo).toLocaleDateString('es-AR') : '-';
+  const validityString = `Vigencia: ${validFrom} al ${validTo}`;
 
-  // Si es rental, necesitamos mapear IDs a Labels para el header
-  // (Esto requeriría importar RENTAL_ITEMS, pero por simplicidad usaremos el ID o buscaremos en params si es posible. 
-  //  Para no complicar dependencias circulares, asumiremos que data[0].rentalItems tiene orden consistente)
-  //  NOTA: En una implementación ideal, pasaríamos los labels como prop o context.
-  
+  // --- ESTILOS REUTILIZABLES ---
+  const tableHeaderStyle = {
+    backgroundColor: STYLES.colors.bgHeader,
+    color: STYLES.colors.secondary,
+    fontWeight: 700,
+    fontSize: '11px',
+    textTransform: 'uppercase' as const,
+    padding: '12px 16px',
+    textAlign: 'left' as const,
+    borderBottom: `1px solid ${STYLES.colors.border}`,
+    letterSpacing: '0.5px',
+  };
+
+  const tableCellStyle = {
+    padding: '10px 16px',
+    borderBottom: `1px solid ${STYLES.colors.border}`,
+    color: STYLES.colors.primary,
+    fontSize: '13px',
+    fontWeight: 500,
+  };
+
+  const cardStyle = {
+    backgroundColor: STYLES.colors.white,
+    border: `1px solid ${STYLES.colors.border}`,
+    borderRadius: '12px',
+    overflow: 'hidden',
+    flex: 1, // Para que ocupen el mismo ancho en flex row
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+  };
+
+  const cardHeaderStyle = {
+    padding: '20px',
+    borderBottom: `1px solid ${STYLES.colors.border}`,
+    backgroundColor: STYLES.colors.white,
+  };
+
+  // --- RENDERIZADO LIFT (DOBLE CARD) ---
+  const renderLiftMode = () => (
+    <div style={{ display: 'flex', gap: '32px', marginBottom: '40px', alignItems: 'flex-start' }}>
+      {/* CARD REGULAR */}
+      <div style={cardStyle}>
+        <div style={cardHeaderStyle}>
+          <h3 style={{ margin: 0, fontSize: '18px', color: STYLES.colors.primary, fontWeight: 800 }}>Temporada Regular</h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: STYLES.colors.secondary }}>Tarifa base estándar</p>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={tableHeaderStyle}>Días</th>
+              <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Adulto</th>
+              <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Menor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row) => (
+              <tr key={`reg-${row.days}`}>
+                <td style={{ ...tableCellStyle, fontWeight: 700, color: STYLES.colors.secondary }}>{row.days}</td>
+                <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatCurrency(row.adultRegularVisual)}</td>
+                <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatCurrency(row.minorRegularVisual)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* CARD PROMO */}
+      <div style={cardStyle}>
+        <div style={cardHeaderStyle}>
+          <h3 style={{ margin: 0, fontSize: '18px', color: STYLES.colors.accent, fontWeight: 800 }}>Temporada Promo</h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: STYLES.colors.secondary }}>Tarifas promocionales aplicadas</p>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={tableHeaderStyle}>Días</th>
+              <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Adulto</th>
+              <th style={{ ...tableHeaderStyle, textAlign: 'right' }}>Menor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row) => (
+              <tr key={`promo-${row.days}`}>
+                <td style={{ ...tableCellStyle, fontWeight: 700, color: STYLES.colors.secondary }}>{row.days}</td>
+                <td style={{ ...tableCellStyle, textAlign: 'right', fontWeight: 700, color: STYLES.colors.accent }}>
+                    {formatCurrency(row.adultPromoVisual)}
+                </td>
+                <td style={{ ...tableCellStyle, textAlign: 'right', fontWeight: 700, color: STYLES.colors.accent }}>
+                    {formatCurrency(row.minorPromoVisual)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  // --- RENDERIZADO RENTAL (CARD ÚNICA ANCHA) ---
+  const renderRentalMode = () => {
+    // Obtener headers dinámicamente del primer row si existen items
+    const rentalItemIds = data.length > 0 && data[0].rentalItems ? Object.keys(data[0].rentalItems) : [];
+    
+    return (
+      <div style={{ display: 'flex', marginBottom: '40px' }}>
+        <div style={cardStyle}>
+          <div style={cardHeaderStyle}>
+            <h3 style={{ margin: 0, fontSize: '18px', color: STYLES.colors.primary, fontWeight: 800 }}>Equipos & Accesorios</h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: STYLES.colors.secondary }}>Tarifas de alquiler diario</p>
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={tableHeaderStyle}>Días</th>
+                {rentalItemIds.map(id => (
+                   <th key={id} style={{ ...tableHeaderStyle, textAlign: 'right' }}>
+                      {id.replace(/_/g, ' ').replace('COMP', '').trim()} 
+                   </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row) => (
+                <tr key={`rent-${row.days}`}>
+                  <td style={{ ...tableCellStyle, fontWeight: 700, color: STYLES.colors.secondary }}>{row.days}</td>
+                  {rentalItemIds.map(id => (
+                    <td key={id} style={{ ...tableCellStyle, textAlign: 'right' }}>
+                        {formatCurrency(row.rentalItems?.[id]?.visual || 0)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div 
         id="official-pdf-template" 
-        className="w-full p-8 flex flex-col items-center bg-white"
-        style={{ backgroundColor: PDF_COLORS.white, color: PDF_COLORS.slate800 }}
+        style={{ 
+            width: '1200px', // Ancho fijo para exportación estable
+            backgroundColor: STYLES.colors.white,
+            color: STYLES.colors.primary,
+            padding: '60px',
+            fontFamily: STYLES.fonts.family,
+            boxSizing: 'border-box'
+        }}
     >
-      {/* HEADER PDF */}
-      <div className="w-full flex justify-between items-center mb-8 border-b pb-4" style={{ borderColor: PDF_COLORS.border }}>
-        <div className="flex flex-col">
-            <h1 className="text-2xl font-bold uppercase tracking-wide" style={{ color: PDF_COLORS.slate900 }}>
-                Cerro Castor
-            </h1>
-            <span className="text-sm font-medium" style={{ color: PDF_COLORS.red }}>
-                Tarifario Oficial {scenario.season}
-            </span>
+      {/* 1. HEADER */}
+      <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '40px', 
+          paddingBottom: '24px', 
+          borderBottom: `2px solid ${STYLES.colors.accent}` 
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+            {/* Logo Wrapper */}
+            <div style={{ width: '80px', display: 'flex', alignItems: 'center' }}>
+                <CastorLogo className="w-full h-auto text-black" />
+            </div>
+            <div>
+                <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900, letterSpacing: '-1px', lineHeight: '1.2' }}>
+                    TARIFARIO OFICIAL
+                </h1>
+                <span style={{ fontSize: '16px', color: STYLES.colors.secondary, fontWeight: 500 }}>
+                    Temporada {scenario.season}
+                </span>
+            </div>
         </div>
-        <div className="flex flex-col items-end">
-            <h2 className="text-lg font-bold" style={{ color: PDF_COLORS.slate700 }}>
+        <div style={{ textAlign: 'right' }}>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: STYLES.colors.primary }}>
                 {scenario.name}
             </h2>
-            <span className="text-xs" style={{ color: PDF_COLORS.slate500 }}>
-                Generado: {new Date().toLocaleDateString('es-AR')}
-            </span>
+            <div style={{ marginTop: '8px', padding: '6px 12px', backgroundColor: STYLES.colors.bgHeader, borderRadius: '6px', display: 'inline-block' }}>
+                <p style={{ margin: 0, fontSize: '13px', color: STYLES.colors.secondary, fontWeight: 600 }}>
+                    {validityString}
+                </p>
+            </div>
         </div>
       </div>
 
-      {/* PARAMETERS SUMMARY */}
-      <div className="w-full mb-6 p-4 rounded flex gap-8 text-sm" style={{ backgroundColor: PDF_COLORS.slate50 }}>
-         <div className="flex flex-col">
-            <span className="text-xs font-bold uppercase mb-1" style={{ color: PDF_COLORS.slate500 }}>Vigencia</span>
-            <span style={{ color: PDF_COLORS.slate800 }}>
-                {scenario.params.validFrom} al {scenario.params.validTo}
-            </span>
-         </div>
-         <div className="flex flex-col">
-            <span className="text-xs font-bold uppercase mb-1" style={{ color: PDF_COLORS.slate500 }}>Aumento</span>
-            <span style={{ color: PDF_COLORS.slate800 }}>
-                {scenario.params.increasePercentage}%
-            </span>
-         </div>
-         <div className="flex flex-col">
-            <span className="text-xs font-bold uppercase mb-1" style={{ color: PDF_COLORS.slate500 }}>Categoría</span>
-            <span style={{ color: PDF_COLORS.slate800 }}>
-                {scenario.category || 'Medios de Elevación'}
-            </span>
-         </div>
+      {/* 2. INTRO TEXT */}
+      <div style={{ marginBottom: '40px', maxWidth: '800px' }}>
+        <p style={{ margin: 0, fontSize: '15px', color: STYLES.colors.secondary, lineHeight: '1.6' }}>
+            A continuación se detallan los valores vigentes para la temporada actual. 
+            Las tarifas están expresadas en pesos argentinos, incluyen IVA y están sujetas a modificaciones sin previo aviso. 
+            Consulte por planes familiares y descuentos especiales en boletería.
+        </p>
       </div>
 
-      {/* DATA TABLE */}
-      <table className="w-full text-sm border-collapse">
-        <thead>
-            <tr style={{ backgroundColor: PDF_COLORS.slate100, borderBottom: `2px solid ${PDF_COLORS.border}` }}>
-                <th className="py-3 px-4 text-left font-bold" style={{ color: PDF_COLORS.slate700 }}>Días</th>
-                {isRental ? (
-                    // Header Rental: Mostramos IDs (Idealmente Labels)
-                    headers.map(h => (
-                        <th key={h} className="py-3 px-2 text-center font-bold text-xs" style={{ color: PDF_COLORS.slate700 }}>
-                           {h.replace(/_/g, ' ').toUpperCase()} 
-                        </th>
-                    ))
-                ) : (
-                    // Header Lift
-                    headers.map(h => (
-                        <th key={h} className="py-3 px-4 text-right font-bold" style={{ color: PDF_COLORS.slate700 }}>
-                            {h}
-                        </th>
-                    ))
-                )}
-            </tr>
-        </thead>
-        <tbody>
-            {data.map((row, index) => (
-                <tr key={row.days} style={{ borderBottom: `1px solid ${PDF_COLORS.border}` }}>
-                    <td className="py-3 px-4 font-bold" style={{ color: PDF_COLORS.slate900 }}>
-                        {row.days}
-                    </td>
-                    
-                    {isRental ? (
-                        headers.map(itemId => {
-                            const price = row.rentalItems?.[itemId]?.visual || 0;
-                            return (
-                                <td key={itemId} className="py-3 px-2 text-center" style={{ color: PDF_COLORS.slate700 }}>
-                                    {formatCurrency(price)}
-                                </td>
-                            );
-                        })
-                    ) : (
-                        <>
-                            <td className="py-3 px-4 text-right" style={{ color: PDF_COLORS.slate700 }}>{formatCurrency(row.adultRegularVisual)}</td>
-                            <td className="py-3 px-4 text-right" style={{ color: PDF_COLORS.slate700 }}>{formatCurrency(row.minorRegularVisual)}</td>
-                            <td className="py-3 px-4 text-right font-medium" style={{ color: PDF_COLORS.red }}>{formatCurrency(row.adultPromoVisual)}</td>
-                            <td className="py-3 px-4 text-right" style={{ color: PDF_COLORS.red }}>{formatCurrency(row.minorPromoVisual)}</td>
-                        </>
-                    )}
-                </tr>
-            ))}
-        </tbody>
-      </table>
+      {/* 3. PRICE GRID (DUAL MODE) */}
+      {isRental ? renderRentalMode() : renderLiftMode()}
 
-      {/* FOOTER */}
-      <div className="mt-8 text-xs text-center w-full pt-4 border-t" style={{ borderColor: PDF_COLORS.border, color: PDF_COLORS.slate500 }}>
-        <p>Documento generado por sistema ERP - Cerro Castor. Uso interno y confidencial.</p>
+      {/* 4. IMPORTANT INFORMATION (LEGALES) */}
+      <div style={{ 
+          backgroundColor: STYLES.colors.bgHeader, 
+          border: `1px solid ${STYLES.colors.border}`, 
+          borderRadius: '12px', 
+          padding: '32px',
+          position: 'relative'
+      }}>
+        <div style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: '32px', 
+            transform: 'translateY(-50%)', 
+            backgroundColor: STYLES.colors.accent, 
+            color: 'white', 
+            padding: '4px 12px', 
+            borderRadius: '4px',
+            fontSize: '11px',
+            fontWeight: 700,
+            textTransform: 'uppercase'
+        }}>
+            Información Importante
+        </div>
+        
+        <ul style={{ margin: '10px 0 0 0', paddingLeft: '0', listStyle: 'none', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            {[
+                "Las fechas de apertura y cierre de temporada están sujetas a condiciones climáticas y de nieve.",
+                "Los pases son personales, intransferibles y no reembolsables bajo ninguna circunstancia.",
+                "En caso de pérdida, rotura o deterioro de la tarjeta (Keycard), se cobrará un cargo por reposición.",
+                "Se considera 'Menor' a niños de 5 a 11 años inclusive. 'Infante' (0-4 años) sin cargo (solo seguro).",
+                "El pase de medio día es válido estrictamente a partir de las 13:00 hs.",
+                "La empresa se reserva el derecho de admisión y permanencia en las instalaciones.",
+                "El uso de casco es obligatorio para menores en escuelas y snowpark."
+            ].map((text, i) => (
+                <li key={i} style={{ fontSize: '12px', color: STYLES.colors.secondary, display: 'flex', alignItems: 'flex-start', gap: '10px', lineHeight: '1.5' }}>
+                    <span style={{ color: STYLES.colors.accent, fontSize: '18px', lineHeight: '12px' }}>•</span>
+                    <span>{text}</span>
+                </li>
+            ))}
+        </ul>
+      </div>
+
+      {/* 5. FOOTER */}
+      <div style={{ marginTop: '60px', paddingTop: '24px', borderTop: `1px solid ${STYLES.colors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '11px', color: STYLES.colors.secondary, fontWeight: 600 }}>
+                &copy; {new Date().getFullYear()} Cerro Castor
+            </span>
+            <span style={{ fontSize: '11px', color: STYLES.colors.border }}>|</span>
+            <span style={{ fontSize: '11px', color: STYLES.colors.secondary }}>
+                Ushuaia, Tierra del Fuego
+            </span>
+        </div>
+        <span style={{ fontSize: '10px', color: STYLES.colors.secondary, fontStyle: 'italic' }}>
+            Documento generado el {new Date().toLocaleDateString('es-AR')} a las {new Date().toLocaleTimeString('es-AR')}
+        </span>
       </div>
     </div>
   );
