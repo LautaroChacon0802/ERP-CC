@@ -27,27 +27,89 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // --- HARD LOGOUT ---
-  const logout = useCallback(async () => {
-    setLoading(true);
-    
-    supabase.auth.signOut().catch(err => console.error("Supabase signOut error:", err));
+  // --- REFACTOR: LISTENER-FIRST STATE MANAGEMENT ---
+  useEffect(() => {
+    let mounted = true;
 
-    setUser(null);
-    setIsAuthenticated(false);
-    
-    localStorage.removeItem('castor_user');
-    Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-            localStorage.removeItem(key);
+    // Esta función centraliza la lógica de actualización de estado basada en la sesión
+    const handleAuthStateChange = async (session: any) => {
+      try {
+        if (session?.user) {
+          // Caso: Sesión activa (Login o Inicialización exitosa)
+          const role = await fetchUserRole(session.user.id);
+          
+          if (mounted) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.user_metadata.full_name || 'Usuario',
+              role: role
+            });
+            setIsAuthenticated(true);
+          }
+        } else {
+          // Caso: Sin sesión (Logout o Inicialización sin usuario)
+          if (mounted) {
+            setUser(null);
+            setIsAuthenticated(false);
+          }
         }
+      } catch (error) {
+        console.error("Error processing auth state change:", error);
+        if (mounted) {
+            setUser(null);
+            setIsAuthenticated(false);
+        }
+      } finally {
+        // CRÍTICO: Siempre desbloquear la UI al terminar el procesamiento del listener
+        if (mounted) setLoading(false);
+      }
+    };
+
+    // Suscripción única a todos los eventos de Auth (INITIAL_SESSION, SIGNED_IN, SIGNED_OUT)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleAuthStateChange(session);
     });
 
-    setLoading(false);
-    window.location.href = '/';
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Control de inactividad
+  // --- ACTIONS ---
+
+  const login = async (email: string, pass: string) => {
+    // 1. Feedback visual inmediato
+    setLoading(true);
+    
+    try {
+        // 2. Invocar API
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password: pass,
+        });
+        
+        if (error) throw error;
+        
+        // 3. IMPORTANTE: NO manipulamos user ni loading(false) aquí.
+        // El listener 'onAuthStateChange' detectará el evento SIGNED_IN y actualizará la UI.
+        // Esto previene race conditions.
+    } catch (error) {
+        // Solo apagamos el loading manualmente si la llamada a la API falla (el listener no se enterará)
+        setLoading(false);
+        throw error;
+    }
+  };
+
+  const logout = useCallback(async () => {
+    setLoading(true);
+    // Invocamos signOut. El listener detectará el evento SIGNED_OUT y limpiará el estado.
+    await supabase.auth.signOut().catch(console.error);
+    localStorage.removeItem('castor_user'); // Limpieza auxiliar
+  }, []);
+
+  // --- CONTROL DE INACTIVIDAD ---
   useEffect(() => {
     if (!user) return;
     let timeoutId: NodeJS.Timeout;
@@ -69,105 +131,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       events.forEach(e => document.removeEventListener(e, resetTimer));
     };
   }, [user, logout]);
-
-  // --- INICIALIZACIÓN ROBUSTA (FIX NETWORK TIMEOUT) ---
-  useEffect(() => {
-    let mounted = true;
-
-    const initializeAuth = async () => {
-      try {
-        // 1. Aumentamos el timeout a 8 segundos para conexiones lentas
-        const timeOutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Auth timeout')), 8000)
-        );
-
-        // 2. Intento de obtener sesión
-        const sessionPromise = supabase.auth.getSession();
-
-        const { data: { session }, error } = await Promise.race([
-            sessionPromise,
-            timeOutPromise
-        ]) as any;
-
-        if (error) throw error;
-
-        if (mounted) {
-          if (session) {
-            // Si hay sesión, buscamos el rol
-            const role = await fetchUserRole(session.user.id);
-            setUser({
-              id: session.user.id,
-              email: session.user.email || '',
-              name: session.user.user_metadata.full_name || 'Usuario',
-              role: role
-            });
-            setIsAuthenticated(true);
-          } else {
-            // Si no hay sesión, limpieza explícita
-            console.log("No active session found during init.");
-            setUser(null);
-            setIsAuthenticated(false);
-          }
-        }
-      } catch (error) {
-        console.warn("Auth init warning (Network or Timeout):", error);
-        // EN CASO DE ERROR/TIMEOUT: Asumimos logout para permitir intento manual
-        if (mounted) {
-            setUser(null);
-            setIsAuthenticated(false);
-            // No forzamos logout() completo para no limpiar localStorage preventivamente si fue solo error de red
-        }
-      } finally {
-        // 3. SIEMPRE liberar la UI
-        if (mounted) {
-            setLoading(false);
-        }
-      }
-    };
-
-    initializeAuth();
-
-    // Listener de cambios de auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (mounted) {
-        if (session) {
-             // Lógica de actualización de usuario al detectar cambio
-             const role = await fetchUserRole(session.user.id);
-             setUser({
-               id: session.user.id,
-               email: session.user.email || '',
-               name: session.user.user_metadata.full_name || 'Usuario',
-               role: role
-             });
-             setIsAuthenticated(true);
-        } else {
-             setUser(null);
-             setIsAuthenticated(false);
-        }
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const login = async (email: string, pass: string) => {
-    setLoading(true);
-    try {
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password: pass,
-        });
-        if (error) throw error;
-    } catch (error) {
-        throw error;
-    } finally {
-        setLoading(false);
-    }
-  };
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated, login, logout, loading }}>
